@@ -6,6 +6,8 @@
 
 #define SAFEALLOC(var, Type) if((var = (Type *)malloc(sizeof(Type)))==NULL) err("not enough memory")
 
+#define BLOCK_SIZE 512
+
 void err(const char *fmt, ...){
     va_list va;
     va_start(va, fmt);
@@ -16,7 +18,7 @@ void err(const char *fmt, ...){
     exit(-1);
 }
 
-enum {ID, END, CT_INT, ASSIGN, SEMICOLON, BREAK, EQUAL, CT_CHAR};
+enum {ID, END, CT_INT, ASSIGN, SEMICOLON, BREAK, EQUAL, CT_CHAR, CT_REAL, CT_STRING};
 
 
 typedef struct _Token{
@@ -51,6 +53,8 @@ Token *addTk(int code){
     tk->code = code;
     tk->line = line;
     tk->next = NULL;
+
+    printf("Token added, code: %d\n", code);
 
     if(lastToken)
         lastToken->next = tk;
@@ -101,6 +105,14 @@ int getNextToken(){
                 else if(ch == '/'){ // Start comment
                     pCrtCh++;
                     state = 11;
+                }
+                else if(ch == '\''){
+                    pCrtCh++;
+                    state = 22; /// Start of CT_CHAR;
+                }
+                else if(ch == '\"'){
+                    pCrtCh++;
+                    state = -1; /// Start of CT_STRING;
                 }
                 else if(isdigit(ch)){ /// INT or REAL
                     pStartCh = pCrtCh; /// set start
@@ -167,6 +179,14 @@ int getNextToken(){
                 if(isdigit(ch)){
                     pCrtCh++; ///consume and don't change state
                 }
+                else if(ch == '.'){
+                    pCrtCh++;
+                    state = 15;
+                }
+                else if(ch == 'e' || ch == 'E'){
+                    pCrtCh++;
+                    state = 17;
+                }
                 else{
                     base = 10;
                     state = 7;
@@ -202,6 +222,18 @@ int getNextToken(){
             case 9:{
                 if(isdigit(ch) && ch < '8'){
                     pCrtCh++;
+                }
+                else if(isdigit(ch)){
+                    pCrtCh++;
+                    state = 15;
+                }
+                else if(ch == '.'){
+                    pCrtCh++;
+                    state = 16;
+                }
+                else if(ch == 'e' || ch == 'E'){
+                    pCrtCh++;
+                    state = 18;
                 }
                 else{
                     base = 8;
@@ -253,10 +285,130 @@ int getNextToken(){
                     pCrtCh++;
                     state = 12;
                 }
+                break;
             }
 
             case 14:{ /// Final state for comment
                 state = 0; /// comment fully ignored go to the beginning, TBD if need to be modified
+                break;
+            }
+
+            case 15:{
+                if(isdigit(ch)){
+                    pCrtCh++;
+                }
+                else if(ch == '.'){
+                    pCrtCh++;
+                    state = 16;
+                }
+                else if(ch == 'e' || ch == 'E'){
+                    pCrtCh++;
+                    state = 18;
+                }
+                else{
+                    state = 21;
+                }
+
+                break;
+            }
+
+            case 16:{
+                if(isdigit(ch)){
+                    pCrtCh++;
+                    state = 17;
+                }
+                else
+                    tkerr(addTk(END), "invalid character s16");
+
+                break;
+            }
+
+            case 17:{
+                if(isdigit(ch)){
+                    pCrtCh++;
+                }
+                else if(ch == 'e' || ch == 'E'){
+                    pCrtCh++;
+                    state = 18;
+                }
+                else{
+                    state = 21;
+                }
+                break;
+            }
+
+            case 18:{
+                if(ch == '-' || ch == '+'){
+                    pCrtCh++;
+                    state = 19;
+                }
+                else if(isdigit(ch)){
+                    pCrtCh++;
+                    state = 20;
+                }
+                else
+                    tkerr(addTk(END), "invalid character s18");
+
+                break;
+            }
+
+            case 19:{
+                if(isdigit(ch)){
+                    pCrtCh++;
+                    state = 20;
+                }
+                else
+                    tkerr(addTk(END), "invalid character s19");
+
+                break;
+            }
+
+            case 20:{
+                if(isdigit(ch))
+                    pCrtCh++;
+                else
+                    state = 21;
+
+                break;
+            }
+
+            case 21:{
+                tk = addTk(CT_REAL);
+                tk->r = strtod(pStartCh, &ptr);
+
+                return tk->code;
+            }
+
+            case 22:{
+                if(ch == '\\'){
+                    pCrtCh++;
+                    state = 23;
+                }
+                else{
+                    pCrtCh++;
+                    state = 24;
+                }
+                break;
+            }
+
+            case 23:{
+                break;
+            }
+
+            case 24:{
+                if(ch == '\''){
+                    pCrtCh++;
+                    state = 25;
+                }
+                break;
+            }
+
+            case 25:{
+                tk = addTk(CT_CHAR);
+                //tk->text = memccpy(pStartCh, &ptr);
+
+                return tk->code;
+
             }
         }
 
@@ -264,7 +416,49 @@ int getNextToken(){
 
 }
 
+void printTokens(Token *head){
+    Token *current = head;
+
+    while(current != NULL){
+        switch(current->code){
+            case CT_INT:{
+                printf("CT_INT: %d\n", current->i);
+                break;
+            }
+            case CT_REAL:{
+                printf("CT_REAL: %f\n", current->r);
+                break;
+            }
+            default:{
+                printf("Code: %d\n", current->code);
+                break;
+            }
+        }
+
+        current = current->next;
+    }
+}
+
 int main()
 {
+    char *text = malloc(BLOCK_SIZE);
+    FILE *f = fopen("test.txt", "r");
+    fgets(text, BLOCK_SIZE, f);
+
+    pCrtCh = text;
+
+    while(*pCrtCh != 0)
+        getNextToken();
+
+    printTokens(tokens);
+
+    char a[3];
+    a[0] = '\\';
+    a[1] = 'n';
+    a[2] = 0;
+    printf("a%sa", a);
+
+
+    fclose(f);
     return 0;
 }
