@@ -18,12 +18,26 @@ void err(const char *fmt, ...){
     exit(-1);
 }
 
-enum {ID, END, CT_INT, ASSIGN, SEMICOLON, BREAK, EQUAL, CT_CHAR, CT_REAL, CT_STRING};
+const char* codes[] = {"END", "ID",
+    "BREAK", "CHAR", "DOUBLE", "ELSE", "FOR", "IF", "INT", "RETURN", "STRUCT", "VOID", "WHILE",
+    "CT_INT", "CT_REAL", "CT_CHAR", "CT_STRING",
+    "COMMA", "SEMICOLON", "LPAR", "RPAR", "LBRACKET", "RBRACKET", "LACC", "RACC",
+    "ADD", "SUB", "MUL", "DIV", "DOT", "AND", "OR", "NOT", "ASSIGN", "EQUAL", "NOTEQ", "LESS", "LESSEQ", "GREATER", "GREATEREQ",
+    "SPACE", "LINECOMMENT", "COMMENT"
+};
+enum {END, ID,
+    BREAK, CHAR, DOUBLE, ELSE, FOR, IF, INT, RETURN, STRUCT, VOID, WHILE,
+    CT_INT, CT_REAL, CT_CHAR, CT_STRING,
+    COMMA, SEMICOLON, LPAR, RPAR, LBRACKET, RBRACKET, LACC, RACC,
+    ADD, SUB, MUL, DIV, DOT, AND, OR, NOT, ASSIGN, EQUAL, NOTEQ, LESS, LESSEQ, GREATER, GREATEREQ,
+    SPACE, LINECOMMENT, COMMENT
+};
 
 
 typedef struct _Token{
     int code;
     union{
+        char c;
         char *text;
         long int i;
         double r;
@@ -54,7 +68,7 @@ Token *addTk(int code){
     tk->line = line;
     tk->next = NULL;
 
-    printf("Token added, code: %d\n", code);
+    printf("Token added, code: %s\n", codes[code]);
 
     if(lastToken)
         lastToken->next = tk;
@@ -91,6 +105,30 @@ int getNextToken(){
                     pCrtCh++;
                     state = 3;
                 }
+                else if(ch == '{'){
+                    pCrtCh++;
+                    state = 26;
+                }
+                else if(ch == '}'){
+                    pCrtCh++;
+                    state = 27;
+                }
+                else if(ch == '('){
+                    pCrtCh++;
+                    state = 28;
+                }
+                else if(ch == ')'){
+                    pCrtCh++;
+                    state = 29;
+                }
+                else if(ch == '<'){
+                    pCrtCh++;
+                    state = 30;
+                }
+                else if(ch == ';'){
+                    pCrtCh++;
+                    state = 31;
+                }
                 else if(ch == ' ' || ch == '\r' || ch == '\t'){
                     pCrtCh++; // consume the character and remains in state 0
                 }
@@ -125,7 +163,11 @@ int getNextToken(){
                         state = 8;
                     }
                 }
-                else tkerr(addTk(END), "invalid character");
+                else{
+                    pCrtCh++; //Just consume for now
+                    //tkerr(addTk(END), "invalid character");
+                }
+
                 break;
             }
 
@@ -140,15 +182,40 @@ int getNextToken(){
             case 2:{
                 nCh = pCrtCh - pStartCh; /// the length
 
+
+
                 if(nCh == 5 && !memcmp(pStartCh, "break", 5)){
                     tk=addTk(BREAK);
                 }
-                else if(nCh == 7 && !memcmp(pStartCh, "ct_char", 4)){
-                    tk=addTk(CT_CHAR);
+                else if(nCh == 4 && !memcmp(pStartCh, "char", 4)){
+                    tk=addTk(CHAR);
+                }
+                else if(nCh == 6 && !memcmp(pStartCh, "struct", 6)){
+                    tk=addTk(STRUCT);
+                }
+                else if(nCh == 3 && !memcmp(pStartCh, "int", 3)){
+                    tk=addTk(INT);
+                }
+                else if(nCh == 2 && !memcmp(pStartCh, "if", 2)){
+                    tk=addTk(IF);
+                }
+                else if(nCh == 4 && !memcmp(pStartCh, "else", 4)){
+                    tk=addTk(ELSE);
+                }
+                else if(nCh == 6 && !memcmp(pStartCh, "double", 6)){
+                    tk=addTk(DOUBLE);
+                }
+                else if(nCh == 4 && !memcmp(pStartCh, "void", 4)){
+                    tk=addTk(DOUBLE);
                 }
                 else{
                     tk = addTk(ID);
+
+                    tk->text = (char*)malloc(nCh+1);
                     memcpy(tk->text, pStartCh, nCh);
+
+                    tk->text[nCh] = 0;
+                    printf("%s", tk->text);
                     //tk->text = createString(pStartCh, pCrtCh);
                 }
 
@@ -257,6 +324,13 @@ int getNextToken(){
                     pCrtCh++;
                     state = 12;
                 }
+                else if(ch == '/'){
+                    while(*pCrtCh != '\n' && *pCrtCh != 0)
+                        pCrtCh++;
+                    line++;
+                    addTk(LINECOMMENT);
+                    return LINECOMMENT;
+                }
                 /// TBD Else statement
                 break;
             }
@@ -290,7 +364,8 @@ int getNextToken(){
 
             case 14:{ /// Final state for comment
                 state = 0; /// comment fully ignored go to the beginning, TBD if need to be modified
-                break;
+                addTk(COMMENT);
+                return COMMENT;
             }
 
             case 15:{
@@ -410,6 +485,41 @@ int getNextToken(){
                 return tk->code;
 
             }
+
+            case 26:{
+                addTk(LACC);
+                return LACC;
+            }
+
+            case 27:{
+                addTk(RACC);
+                return RACC;
+            }
+            case 28:{
+                addTk(LBRACKET);
+                return LBRACKET;
+            }
+
+            case 29:{
+                addTk(RBRACKET);
+                return RBRACKET;
+            }
+
+            case 30:{
+                if(ch == '='){
+                    pCrtCh++;
+                    addTk(LESSEQ);
+                    return LESSEQ;
+                }
+                else{
+                    addTk(LESS);
+                    return LESS;
+                }
+            }
+            case 31:{
+                addTk(SEMICOLON);
+                return SEMICOLON;
+            }
         }
 
     }
@@ -430,7 +540,7 @@ void printTokens(Token *head){
                 break;
             }
             default:{
-                printf("Code: %d\n", current->code);
+                printf("Code: %s\n", codes[current->code]);
                 break;
             }
         }
@@ -442,22 +552,17 @@ void printTokens(Token *head){
 int main()
 {
     char *text = malloc(BLOCK_SIZE);
-    FILE *f = fopen("test.txt", "r");
-    fgets(text, BLOCK_SIZE, f);
+    FILE *f = fopen("input.txt", "r");
 
-    pCrtCh = text;
 
-    while(*pCrtCh != 0)
-        getNextToken();
+    while(fread(text,1, BLOCK_SIZE, f)){
+        pCrtCh = text;
+        while(*pCrtCh != 0)
+            getNextToken();
+    }
+    addTk(END);
 
     printTokens(tokens);
-
-    char a[3];
-    a[0] = '\\';
-    a[1] = 'n';
-    a[2] = 0;
-    printf("a%sa", a);
-
 
     fclose(f);
     return 0;
