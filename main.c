@@ -25,14 +25,14 @@ const char* codes[] = {"END", "ID",
     "ADD", "SUB", "MUL", "DIV", "DOT", "AND", "OR", "NOT", "ASSIGN", "EQUAL", "NOTEQ", "LESS", "LESSEQ", "GREATER", "GREATEREQ",
     "SPACE", "LINECOMMENT", "COMMENT"
 };
+
 enum {END, ID,
-    BREAK, CHAR, DOUBLE, ELSE, FOR, IF, INT, RETURN, STRUCT, VOID, WHILE,
-    CT_INT, CT_REAL, CT_CHAR, CT_STRING,
-    COMMA, SEMICOLON, LPAR, RPAR, LBRACKET, RBRACKET, LACC, RACC,
-    ADD, SUB, MUL, DIV, DOT, AND, OR, NOT, ASSIGN, EQUAL, NOTEQ, LESS, LESSEQ, GREATER, GREATEREQ,
+    BREAK, CHAR, DOUBLE, ELSE, FOR, IF, INT, RETURN, STRUCT, VOID, WHILE, ///KEYWORDS
+    CT_INT, CT_REAL, CT_CHAR, CT_STRING, /// CONSTANTS
+    COMMA, SEMICOLON, LPAR, RPAR, LBRACKET, RBRACKET, LACC, RACC, /// DELIMITERS
+    ADD, SUB, MUL, DIV, DOT, AND, OR, NOT, ASSIGN, EQUAL, NOTEQ, LESS, LESSEQ, GREATER, GREATEREQ, /// OPERATORS
     SPACE, LINECOMMENT, COMMENT
 };
-
 
 typedef struct _Token{
     int code;
@@ -68,14 +68,13 @@ Token *addTk(int code){
     tk->line = line;
     tk->next = NULL;
 
-    printf("Token added, code: %s\n", codes[code]);
-
     if(lastToken)
         lastToken->next = tk;
     else
         tokens = tk;
 
     lastToken = tk;
+
     return tk;
 
 }
@@ -101,34 +100,110 @@ int getNextToken(){
                     pCrtCh++; // consume the character
                     state = 1; // set the new state
                 }
-                else if(ch == '='){
+
+
+                /// VVVVVVVVVV ///
+                /// DELIMITERS ///
+                /// VVVVVVVVVV ///
+
+                else if(ch == ','){
                     pCrtCh++;
-                    state = 3;
-                }
-                else if(ch == '{'){
-                    pCrtCh++;
-                    state = 26;
-                }
-                else if(ch == '}'){
-                    pCrtCh++;
-                    state = 27;
-                }
-                else if(ch == '('){
-                    pCrtCh++;
-                    state = 28;
-                }
-                else if(ch == ')'){
-                    pCrtCh++;
-                    state = 29;
-                }
-                else if(ch == '<'){
-                    pCrtCh++;
-                    state = 30;
+                    state = 200;
                 }
                 else if(ch == ';'){
                     pCrtCh++;
-                    state = 31;
+                    state = 201;
                 }
+                else if(ch == '('){
+                    pCrtCh++;
+                    state = 202;
+                }
+                else if(ch == ')'){
+                    pCrtCh++;
+                    state = 203;
+                }
+                else if(ch == '['){
+                    pCrtCh++;
+                    state = 204;
+                }
+                else if(ch == ']'){
+                    pCrtCh++;
+                    state = 205;
+                }
+                else if(ch == '{'){
+                    pCrtCh++;
+                    state = 206;
+                }
+                else if(ch == '}'){
+                    pCrtCh++;
+                    state = 207;
+                }
+
+
+                /// VVVVVVVVV ///
+                /// OPERATORS ///
+                /// VVVVVVVVV ///
+
+                else if(ch == '+'){
+                    pCrtCh++;
+                    state = 300;
+                }
+                else if(ch == '-'){
+                    pCrtCh++;
+                    state = 301;
+                }
+                else if(ch == '*'){
+                    pCrtCh++;
+                    state = 302;
+                }
+                else if(ch == '/'){
+                    pCrtCh++;
+                    state = 11; /// intermediate state to differ COMMENTS and DIV
+                }
+                else if(ch == '.'){
+                    pCrtCh++;
+                    state = 304;
+                }
+                else if(ch == '&'){
+                    pCrtCh++;
+
+                    if(*pCrtCh == '&'){
+                        pCrtCh++;
+                        state = 305;
+                    }
+                    else{
+                        tkerr(addTk(END), "invalid character");
+                    }
+
+                }
+                else if(ch == '|'){
+                    pCrtCh++;
+
+                    if(*pCrtCh == '|'){
+                        pCrtCh++;
+                        state = 306;
+                    }
+                    else{
+                        tkerr(addTk(END), "invalid character");
+                    }
+                }
+                else if(ch == '!'){
+                    pCrtCh++;
+                    state = 307;
+                }
+                else if(ch == '='){
+                    pCrtCh++;
+                    state = 310;
+                }
+                else if(ch == '<'){
+                    pCrtCh++;
+                    state = 313;
+                }
+                else if(ch == '>'){
+                    pCrtCh++;
+                    state = 316;
+                }
+
                 else if(ch == ' ' || ch == '\r' || ch == '\t'){
                     pCrtCh++; // consume the character and remains in state 0
                 }
@@ -140,10 +215,7 @@ int getNextToken(){
                     addTk(END);
                     return END;
                 }
-                else if(ch == '/'){ // Start comment
-                    pCrtCh++;
-                    state = 11;
-                }
+
                 else if(ch == '\''){
                     pCrtCh++;
                     state = 22; /// Start of CT_CHAR;
@@ -183,63 +255,48 @@ int getNextToken(){
                 nCh = pCrtCh - pStartCh; /// the length
 
 
-
                 if(nCh == 5 && !memcmp(pStartCh, "break", 5)){
                     tk=addTk(BREAK);
                 }
                 else if(nCh == 4 && !memcmp(pStartCh, "char", 4)){
                     tk=addTk(CHAR);
                 }
-                else if(nCh == 6 && !memcmp(pStartCh, "struct", 6)){
-                    tk=addTk(STRUCT);
-                }
-                else if(nCh == 3 && !memcmp(pStartCh, "int", 3)){
-                    tk=addTk(INT);
-                }
-                else if(nCh == 2 && !memcmp(pStartCh, "if", 2)){
-                    tk=addTk(IF);
+                else if(nCh == 6 && !memcmp(pStartCh, "double", 6)){
+                    tk=addTk(DOUBLE);
                 }
                 else if(nCh == 4 && !memcmp(pStartCh, "else", 4)){
                     tk=addTk(ELSE);
                 }
-                else if(nCh == 6 && !memcmp(pStartCh, "double", 6)){
-                    tk=addTk(DOUBLE);
+                else if(nCh == 3 && !memcmp(pStartCh, "for", 3)){
+                    tk=addTk(FOR);
+                }
+                else if(nCh == 2 && !memcmp(pStartCh, "if", 2)){
+                    tk=addTk(IF);
+                }
+                else if(nCh == 3 && !memcmp(pStartCh, "int", 3)){
+                    tk=addTk(INT);
+                }
+                else if(nCh == 6 && !memcmp(pStartCh, "return", 6)){
+                    tk=addTk(RETURN);
+                }
+                else if(nCh == 6 && !memcmp(pStartCh, "struct", 6)){
+                    tk=addTk(STRUCT);
                 }
                 else if(nCh == 4 && !memcmp(pStartCh, "void", 4)){
-                    tk=addTk(DOUBLE);
+                    tk=addTk(VOID);
+                }
+                else if(nCh == 5 && !memcmp(pStartCh, "while", 5)){
+                    tk=addTk(WHILE);
                 }
                 else{
                     tk = addTk(ID);
 
                     tk->text = (char*)malloc(nCh+1);
                     memcpy(tk->text, pStartCh, nCh);
-
                     tk->text[nCh] = 0;
-                    printf("%s", tk->text);
-                    //tk->text = createString(pStartCh, pCrtCh);
                 }
 
                 return tk->code;
-            }
-
-            case 3:{
-                if(ch == '='){
-                    pCrtCh++;
-                    state=4;
-                }
-                else
-                    state = 5;
-                break;
-            }
-
-            case 4:{
-                addTk(EQUAL);
-                return EQUAL;
-            }
-
-            case 5:{
-                addTk(ASSIGN);
-                return ASSIGN;
             }
 
             case 6:{
@@ -330,6 +387,9 @@ int getNextToken(){
                     line++;
                     addTk(LINECOMMENT);
                     return LINECOMMENT;
+                }
+                else{
+                    state = 303;
                 }
                 /// TBD Else statement
                 break;
@@ -467,6 +527,18 @@ int getNextToken(){
             }
 
             case 23:{
+                switch(ch){
+                    case 'a':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    default: {
+                        tkerr(addTk(END), "invalid character s23");
+                        break;
+                    }
+
+                }
                 break;
             }
 
@@ -486,25 +558,6 @@ int getNextToken(){
 
             }
 
-            case 26:{
-                addTk(LACC);
-                return LACC;
-            }
-
-            case 27:{
-                addTk(RACC);
-                return RACC;
-            }
-            case 28:{
-                addTk(LBRACKET);
-                return LBRACKET;
-            }
-
-            case 29:{
-                addTk(RBRACKET);
-                return RBRACKET;
-            }
-
             case 30:{
                 if(ch == '='){
                     pCrtCh++;
@@ -516,14 +569,160 @@ int getNextToken(){
                     return LESS;
                 }
             }
-            case 31:{
+
+            /// VVVVVVVVVV ///
+            /// DELIMITORS ///
+            /// VVVVVVVVVV ///
+
+            case 200:{
+                addTk(COMMA);
+                return COMMA;
+            }
+            case 201:{
                 addTk(SEMICOLON);
                 return SEMICOLON;
             }
+            case 202:{
+                addTk(LPAR);
+                return LPAR;
+            }
+            case 203:{
+                addTk(RPAR);
+                return RPAR;
+            }
+            case 204:{
+                addTk(LBRACKET);
+                return LBRACKET;
+            }
+            case 205:{
+                addTk(RBRACKET);
+                return RBRACKET;
+            }
+            case 206:{
+                addTk(LACC);
+                return LACC;
+            }
+            case 207:{
+                addTk(RACC);
+                return RACC;
+            }
+
+            /// VVVVVVVVV ///
+            /// OPERATORS ///
+            /// VVVVVVVVV ///
+
+            case 300:{
+                addTk(ADD);
+                return ADD;
+            }
+            case 301:{
+                addTk(SUB);
+                return SUB;
+            }
+            case 302:{
+                addTk(MUL);
+                return MUL;
+            }
+            case 303:{
+                addTk(DIV);
+                return DIV;
+            }
+            case 304:{
+                addTk(DOT);
+                return DOT;
+            }
+            case 305:{
+                addTk(ADD);
+                return ADD;
+            }
+            case 306:{
+                addTk(OR);
+                return OR;
+            }
+            case 307:{
+                if(ch == '='){
+                    pCrtCh++;
+                    state=308;
+                }
+                else
+                    state = 309;
+                break;
+            }
+             case 308:{
+                addTk(NOTEQ);
+                return NOTEQ;
+            }
+             case 309:{
+                addTk(NOT);
+                return NOT;
+            }
+            case 310:{
+                if(ch == '='){
+                    pCrtCh++;
+                    state=311;
+                }
+                else
+                    state = 312;
+                break;
+            }
+            case 311:{
+                addTk(EQUAL);
+                return EQUAL;
+            }
+            case 312:{
+                addTk(ASSIGN);
+                return ASSIGN;
+            }
+            case 313:{
+                if(ch == '='){
+                    pCrtCh++;
+                    state=314;
+                }
+                else
+                    state = 315;
+                break;
+            }
+            case 314:{
+                addTk(LESSEQ);
+                return LESSEQ;
+            }
+            case 315:{
+                addTk(LESS);
+                return LESS;
+            }
+            case 316:{
+                if(ch == '='){
+                    pCrtCh++;
+                    state=317;
+                }
+                else
+                    state = 318;
+                break;
+            }
+            case 317:{
+                addTk(GREATEREQ);
+                return GREATEREQ;
+            }
+            case 318:{
+                addTk(GREATER);
+                return GREATER;
+            }
+
         }
 
     }
 
+}
+
+
+Token *consumedTk;
+int consume(int code){
+    if(crtTk->code == code){
+        consumedTk = crtTk;
+        crtTk = crtTk->next;
+        return 1;
+    }
+    return 0;
 }
 
 void printTokens(Token *head){
@@ -532,7 +731,7 @@ void printTokens(Token *head){
     while(current != NULL){
         switch(current->code){
             case CT_INT:{
-                printf("CT_INT: %d\n", current->i);
+                printf("CT_INT: %ld\n", current->i);
                 break;
             }
             case CT_REAL:{
@@ -551,16 +750,25 @@ void printTokens(Token *head){
 
 int main()
 {
-    char *text = malloc(BLOCK_SIZE);
-    FILE *f = fopen("input.txt", "r");
 
+    FILE *f = fopen("input.txt", "rb");
 
-    while(fread(text,1, BLOCK_SIZE, f)){
-        pCrtCh = text;
-        while(*pCrtCh != 0)
-            getNextToken();
+    fseek(f, 0, SEEK_END);
+    int size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    char *text = malloc(size);
+
+    fread(text,size, 1, f);
+    text[size] = 0;
+    pCrtCh = text;
+
+    for(;;){
+        getNextToken();
+
+        if(lastToken->code == END)
+            break;
     }
-    addTk(END);
 
     printTokens(tokens);
 
