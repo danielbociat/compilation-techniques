@@ -537,7 +537,6 @@ int getNextToken(){
                         tkerr(addTk(END), "invalid character s23");
                         break;
                     }
-
                 }
                 break;
             }
@@ -552,10 +551,7 @@ int getNextToken(){
 
             case 25:{
                 tk = addTk(CT_CHAR);
-                //tk->text = memccpy(pStartCh, &ptr);
-
                 return tk->code;
-
             }
 
             case 30:{
@@ -707,14 +703,11 @@ int getNextToken(){
                 addTk(GREATER);
                 return GREATER;
             }
-
         }
-
     }
-
 }
 
-
+Token *crtTk;
 Token *consumedTk;
 int consume(int code){
     if(crtTk->code == code){
@@ -724,6 +717,81 @@ int consume(int code){
     }
     return 0;
 }
+
+int exprRel(){
+    return 1;
+}
+
+int exprEq(){
+    if(exprEq()){
+        if(!consume(EQUAL) && !consume(NOTEQ)) tkerr(crtTk, "invalid expression");
+        if(!exprRel()) tkerr(crtTk, "invalid expression");
+        return 1;
+    }
+
+    if(exprRel())
+        return 1;
+
+    return 0;
+}
+
+int exprAnd(){
+    if(exprAnd()){
+        if(!consume(AND)) tkerr(crtTk, "invalid expression");
+        if(!exprEq()) tkerr(crtTk, "invalid expression");
+        return 1;
+    }
+
+    if(exprEq())
+        return 1;
+
+    return 0;
+}
+
+int exprOr(){
+    if(exprOr()){
+        if(!consume(OR)) tkerr(crtTk, "invalid expression");
+        if(!exprAnd()) tkerr(crtTk, "invalid expression");
+        return 1;
+    }
+
+    if(exprAnd())
+        return 1;
+
+    return 0;
+}
+
+int exprUnary(){
+    return 1;
+}
+
+int exprAssign(){
+    if(exprUnary()){
+        if(!consume(ASSIGN)) tkerr(crtTk, "missing = after ID");
+        if(!exprAssign()) tkerr(crtTk, "invalid expression after =");
+        return 1;
+    }
+    if(exprOr())
+        return 1;
+
+    return 0;
+}
+
+int expr(){
+
+    if(consume(CT_INT)) return 1;
+
+    if(!exprAssign()) return 0;
+
+    return 1;
+}
+
+int ruleWhile();
+
+int declVar();
+
+int stmCompond();
+int stm();
 
 void printTokens(Token *head){
     Token *current = head;
@@ -750,8 +818,7 @@ void printTokens(Token *head){
 
 int main()
 {
-
-    FILE *f = fopen("input.txt", "rb");
+    FILE *f = fopen("input2.txt", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
@@ -772,6 +839,51 @@ int main()
 
     printTokens(tokens);
 
+    crtTk = tokens;
+    stm();
+
     fclose(f);
+    return 0;
+}
+
+
+int ruleWhile(){
+    if(!consume(WHILE))return 0;
+    if(!consume(LPAR))tkerr(crtTk,"missing ( after while");
+    if(!expr())tkerr(crtTk,"invalid expression after (");
+    if(!consume(RPAR))tkerr(crtTk,"missing )");
+    if(!stm())tkerr(crtTk,"missing while statement");
+
+    return 1;
+}
+
+int declVar(){
+    return 0;
+}
+
+int stmCompound()
+{
+    if(!consume(LACC))return 0;
+    for(;;){
+        if(declVar()){
+        }
+        else if(stm()){
+
+        }
+        else break;
+    }
+
+    if(!consume(RACC))tkerr(crtTk,"missing } or syntax error");
+    return 1;
+}
+
+int stm(){
+    if(stmCompound()){
+        return 1;
+    }
+    if(ruleWhile()){
+        printf("read while\n");
+        return 1;
+    }
     return 0;
 }
