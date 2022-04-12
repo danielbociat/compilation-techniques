@@ -387,7 +387,7 @@ int getNextToken(){
                     while(*pCrtCh != '\n' && *pCrtCh != 0)
                         pCrtCh++;
                     line++;
-                    addTk(LINECOMMENT);
+                    //addTk(LINECOMMENT);
                     return LINECOMMENT;
                 }
                 else{
@@ -426,7 +426,7 @@ int getNextToken(){
 
             case 14:{ /// Final state for comment
                 state = 0; /// comment fully ignored go to the beginning, TBD if need to be modified
-                addTk(COMMENT);
+                //addTk(COMMENT);
                 return COMMENT;
             }
 
@@ -779,7 +779,6 @@ int consume(int code){
     return 0;
 }
 
-
 int ruleIf();
 int ruleWhile();
 int ruleFor();
@@ -797,7 +796,6 @@ int funcArg();
 
 int stm();
 int stmCompound();
-
 
 int expr();
 int exprAssign();
@@ -843,7 +841,7 @@ void printTokens(Token *head){
     }
 }
 
-int DEBUG = 1, SUCCESS = 0;
+int DEBUG = 0, SUCCESS = 1;
 
 /// prints when entering a state with current code
 void print(char s[]){
@@ -863,7 +861,7 @@ void success(char s[]){
 
 int main()
 {
-    FILE *f = fopen("input2.txt", "rb");
+    FILE *f = fopen("9.c", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
@@ -877,7 +875,7 @@ int main()
 
     for(;;){
         getNextToken();
-
+        //printf("%s ", codes[lastToken->code]);
         if(lastToken->code == END)
             break;
     }
@@ -885,7 +883,7 @@ int main()
     printTokens(tokens);
 
     crtTk = tokens;
-    stm();
+    unit();
 
     fclose(f);
     return 0;
@@ -908,9 +906,11 @@ int unit(){
 int declStruct(){
     print("declStruct\n");
 
+    Token *startTk = crtTk;
+
     if(consume(STRUCT)){
         if(!consume(ID)) tkerr(crtTk, "invalid expression declStruct 1");
-        if(!consume(LACC)) tkerr(crtTk, "invalid expression declStruct 2");
+        if(!consume(LACC)) {crtTk=startTk; return 0;};
 
         for(;;){
             if(declVar()) {}
@@ -930,6 +930,8 @@ int declStruct(){
 ///declVar:  typeBase ID arrayDecl? ( COMMA ID arrayDecl? )* SEMICOLON ;
 int declVar(){
     print("declVar\n");
+
+    Token *startTk = crtTk;
     if(typeBase()){
         if(!consume(ID)) tkerr(crtTk, "invalid expression declVar 1");
         arrayDecl();
@@ -950,6 +952,7 @@ int declVar(){
         return 1;
     }
 
+    crtTk = startTk;
     return 0;
 }
 
@@ -1001,10 +1004,13 @@ int declFunc(){
         if(consume(MUL)){}
     }
     else if(consume(VOID)){}
-    else return 0;
+    else{
+      crtTk = startTk;
+      return 0;
+    }
 
     if(!consume(ID)) tkerr(crtTk, "invalid expression declFunc");
-    if(!consume(LPAR)) tkerr(crtTk, "invalid expression declFunc");
+    if(!consume(LPAR)) {crtTk = startTk; return 0;};
     if(funcArg()){
         for(;;){
             if(consume(COMMA)){
@@ -1014,7 +1020,7 @@ int declFunc(){
         }
     }
     if(!consume(RPAR)) tkerr(crtTk, "invalid expression declFunc");
-    if(!stmCompound) tkerr(crtTk, "invalid expression declFunc");
+    if(!stmCompound()) tkerr(crtTk, "invalid expression declFunc");
 
     success("declFunc\n");
     return 1;
@@ -1070,7 +1076,7 @@ int stm(){
     } else {crtTk = startTk;}
 
 
-    if(expr()){print("HEHE");}
+    if(expr()){}
     if(consume(SEMICOLON)) return 1;
 
     return 0;
