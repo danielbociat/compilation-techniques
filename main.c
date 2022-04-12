@@ -6,6 +6,8 @@
 
 #define SAFEALLOC(var, Type) if((var = (Type *)malloc(sizeof(Type)))==NULL) err("not enough memory")
 
+
+
 #define BLOCK_SIZE 512
 
 void err(const char *fmt, ...){
@@ -533,6 +535,61 @@ int getNextToken(){
                         state = 24;
                         break;
                     }
+                    case 'b':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case 'f':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case 'n':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case 'r':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case 't':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case 'v':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case '\'':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case '?':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case '\"':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case '\\':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
+                    case '0':{
+                        pCrtCh++;
+                        state = 24;
+                        break;
+                    }
                     default: {
                         tkerr(addTk(END), "invalid character s23");
                         break;
@@ -739,7 +796,7 @@ int declFunc();
 int funcArg();
 
 int stm();
-int stmCompond();
+int stmCompound();
 
 
 int expr();
@@ -786,10 +843,22 @@ void printTokens(Token *head){
     }
 }
 
-int DEBUG = 0;
+int DEBUG = 1, SUCCESS = 0;
+
+/// prints when entering a state with current code
 void print(char s[]){
-    if(DEBUG)
-        printf("%s", s);
+    if(DEBUG){
+        printf("\n%s", s);
+        printf("CRT CODE: %s\n", codes[crtTk->code]);
+
+    }
+}
+
+/// prints when a state returns 1
+void success(char s[]){
+    if(SUCCESS){
+        printf("\nSUCCESSFULY READ: %s", s);
+    }
 }
 
 int main()
@@ -822,6 +891,42 @@ int main()
     return 0;
 }
 
+int unit(){
+    print("unit\n");
+
+    for(;;){
+        if(declStruct() || declFunc() || declVar()) {}
+        else break;
+    }
+
+    if(!consume(END)) tkerr(crtTk, "missing END token in unit");
+
+    success("unit\n");
+    return 1;
+}
+
+int declStruct(){
+    print("declStruct\n");
+
+    if(consume(STRUCT)){
+        if(!consume(ID)) tkerr(crtTk, "invalid expression declStruct 1");
+        if(!consume(LACC)) tkerr(crtTk, "invalid expression declStruct 2");
+
+        for(;;){
+            if(declVar()) {}
+            else break;
+        }
+
+        if(!consume(RACC)) tkerr(crtTk, "invalid expression declStruct 3");
+        if(!consume(SEMICOLON)) tkerr(crtTk, "invalid expression declStruct 4");
+
+        success("declStruct\n");
+        return 1;
+    }
+
+    return 0;
+}
+
 ///declVar:  typeBase ID arrayDecl? ( COMMA ID arrayDecl? )* SEMICOLON ;
 int declVar(){
     print("declVar\n");
@@ -840,6 +945,8 @@ int declVar(){
         }
 
         if(!consume(SEMICOLON)) tkerr(crtTk, "invalid expression declVar 3");
+
+        success("declVar\n");
         return 1;
     }
 
@@ -854,6 +961,8 @@ int typeBase(){
     if(consume(CHAR)) return 1;
     if(consume(STRUCT)){
         if(!consume(ID)) tkerr(crtTk, "invalid expression typeBase");
+
+        success("typeBase\n");
         return 1;
     }
     return 0;
@@ -864,6 +973,8 @@ int arrayDecl(){
     if(consume(LBRACKET)){
         expr();
         if(!consume(RBRACKET)) tkerr(crtTk, "invalid expression arrayDecl");
+
+        success("arrayDecl\n");
         return 1;
     }
     return 0;
@@ -874,6 +985,211 @@ int typeName(){
     if(typeBase()){
         arrayDecl();
 
+        success("typeName\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+
+int declFunc(){
+    print("declFunc\n");
+    Token *startTk = crtTk;
+
+    if(typeBase()){
+        if(consume(MUL)){}
+    }
+    else if(consume(VOID)){}
+    else return 0;
+
+    if(!consume(ID)) tkerr(crtTk, "invalid expression declFunc");
+    if(!consume(LPAR)) tkerr(crtTk, "invalid expression declFunc");
+    if(funcArg()){
+        for(;;){
+            if(consume(COMMA)){
+                if(!funcArg()) tkerr(crtTk, "invalid expression declFunc");
+            }
+            else break;
+        }
+    }
+    if(!consume(RPAR)) tkerr(crtTk, "invalid expression declFunc");
+    if(!stmCompound) tkerr(crtTk, "invalid expression declFunc");
+
+    success("declFunc\n");
+    return 1;
+}
+
+///funcArg: typeBase ID arrayDecl? ;
+int funcArg(){
+    print("funcArg\n");
+    Token *startTk = crtTk;
+
+    if(typeBase()){
+        if(!consume(ID)) tkerr(crtTk, "invalid expression funcArg");
+        if(arrayDecl()) {}
+
+        success("funcArg\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int stm(){
+    print("stm\n");
+    Token *startTk = crtTk;
+
+    if(stmCompound()){
+        return 1;
+    } else {crtTk = startTk;}
+
+    if(ruleIf()){
+        print("RULE IF\n");
+        return 1;
+    } else {crtTk = startTk;}
+
+    if(ruleWhile()){
+        print("RULE WHILE\n");
+        return 1;
+    } else {crtTk = startTk;}
+
+    if(ruleFor()){
+        print("RULE FOR\n");
+        return 1;
+    } else {crtTk = startTk;}
+
+    if(ruleBreak()){
+        print("RULE BREAK\n");
+        return 1;
+    } else {crtTk = startTk;}
+
+    if(ruleReturn()){
+        print("RULE RETURN\n");
+        return 1;
+    } else {crtTk = startTk;}
+
+
+    if(expr()){print("HEHE");}
+    if(consume(SEMICOLON)) return 1;
+
+    return 0;
+}
+
+int stmCompound()
+{
+    print("stmCompound\n");
+
+    Token *startTk = crtTk;
+
+    if(consume(LACC)){
+        for(;;){
+            if(declVar()){
+            }
+            else if(stm()){
+            }
+            else break;
+        }
+
+        if(!consume(RACC))tkerr(crtTk,"missing } or syntax error stmCompound");
+
+        success("stmCompound\n");
+        return 1;
+    }
+
+
+    return 0;
+}
+
+int ruleIf(){
+    Token *startTk = crtTk;
+
+    print("ruleIf\n");
+
+    if(consume(IF)){
+        if(!consume(LPAR))  tkerr(crtTk,"missing ( after if");
+        if(!expr()) tkerr(crtTk,"invalid expression after (");
+        if(!consume(RPAR))  tkerr(crtTk,"missing )");
+        if(!stm())  tkerr(crtTk,"missing if statement");
+
+        if(consume(ELSE)){
+            if(!stm())  tkerr(crtTk,"missing else statement");
+        }
+
+        success("ruleIf\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int ruleWhile(){
+    Token *startTk = crtTk;
+
+    print("ruleWhile\n");
+
+    if(consume(WHILE)){
+        if(!consume(LPAR))  tkerr(crtTk,"missing ( after while");
+        if(!expr())tkerr(crtTk,"invalid expression after (");
+        if(!consume(RPAR))  tkerr(crtTk,"missing )");
+
+        if(!stm())  tkerr(crtTk,"missing while statement");
+        success("ruleWhile\n");
+        return 1;
+    }
+
+
+    return 0;
+}
+
+int ruleFor(){
+    Token *startTk = crtTk;
+
+    print("ruleFor\n");
+
+    if(consume(FOR)){
+        if(!consume(LPAR))  tkerr(crtTk,"missing ( after for");
+        if(expr()){}
+        if(!consume(SEMICOLON)) tkerr(crtTk,"missing ; after first statement in for");
+
+        if(expr()){}
+        if(!consume(SEMICOLON)) tkerr(crtTk,"missing ; after second statement in for");
+
+        if(expr()){}
+        if(!consume(RPAR))  tkerr(crtTk,"missing ) after third statement in for");
+
+        if(!stm())  tkerr(crtTk,"missing for statement");
+        success("ruleFor\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int ruleBreak(){
+    Token *startTk = crtTk;
+
+    print("ruleBreak\n");
+
+    if(consume(BREAK)){
+        if(!consume(SEMICOLON)) tkerr(crtTk,"missing ; after break");
+        success("ruleBreak\n");
+        return 1;
+    }
+
+    return 0;
+}
+
+int ruleReturn(){
+    Token *startTk = crtTk;
+
+    print("ruleReturn\n");
+
+    if(consume(RETURN)){
+        if(expr()) {}
+        if(!consume(SEMICOLON)) tkerr(crtTk,"missing ; after return");
+
+        success("ruleReturn\n");
         return 1;
     }
 
@@ -893,18 +1209,21 @@ int exprAssign(){
 
     if(exprUnary()){
         if(consume(ASSIGN)){
-            if(exprAssign())
+            if(exprAssign()){
+                success("exprAssign\n");
                 return 1;
+            }
+
             tkerr(crtTk, "invalid expression after =, exprAssign");
         }
     }
 
-
     crtTk = startTk;
-    if(exprOr())
+    if(exprOr()){
+        success("exprAssign\n");
         return 1;
+    }
 
-    crtTk = startTk;
     return 0;
 }
 
@@ -918,10 +1237,11 @@ int exprOr(){
 
     if(exprAnd()){
         if(!exprOr1()) tkerr(crtTk, "invalid expression exprOr");
+        success("exprOr\n");
         return 1;
     }
 
-    crtTk = startTk;
+
     return 0;
 }
 int exprOr1(){
@@ -931,10 +1251,12 @@ int exprOr1(){
     if(consume(OR)){
         if(!exprAnd()) tkerr(crtTk, "invalid expression exprOr1");
         if(!exprOr1()) tkerr(crtTk, "invalid expression exprOr1");
+
+        success("exprOr1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprOr1\n");
     return 1;
 }
 
@@ -948,10 +1270,12 @@ int exprAnd(){
 
     if(exprEq()){
         if(!exprAnd1()) tkerr(crtTk, "invalid expression exprAnd");
+
+        success("exprAnd\n");
         return 1;
     }
 
-    crtTk = startTk;
+
     return 0;
 }
 int exprAnd1(){
@@ -961,10 +1285,12 @@ int exprAnd1(){
     if(consume(AND)){
         if(!exprEq()) tkerr(crtTk, "invalid expression exprAnd1");
         if(!exprAnd1()) tkerr(crtTk, "invalid expression exprAnd1");
+
+        success("exprAnd1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprAnd1\n");
     return 1;
 }
 
@@ -978,10 +1304,12 @@ int exprEq(){
 
     if(exprRel()){
         if(!exprEq1()) tkerr(crtTk, "invalid expression exprEq");
+
+        success("exprEq\n");
         return 1;
     }
 
-    crtTk = startTk;
+
     return 0;
 }
 int exprEq1(){
@@ -991,10 +1319,12 @@ int exprEq1(){
     if(consume(EQUAL) || consume(NOTEQ)){
         if(!exprRel()) tkerr(crtTk, "invalid expression exprEq1");
         if(!exprEq1()) tkerr(crtTk, "invalid expression exprEq1");
+
+        success("exprEq1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprEq1\n");
     return 1;
 }
 
@@ -1008,10 +1338,11 @@ int exprRel(){
 
     if(exprAdd()){
         if(!exprRel1()) tkerr(crtTk, "invalid expression exprRel");
+
+        success("exprRel\n");
         return 1;
     }
 
-    crtTk = startTk;
     return 0;
 }
 int exprRel1(){
@@ -1021,10 +1352,12 @@ int exprRel1(){
     if(consume(LESS) || consume(LESSEQ) || consume(GREATER) || consume(GREATEREQ)){
         if(!exprAdd()) tkerr(crtTk, "invalid expression exprRel1");
         if(!exprRel1()) tkerr(crtTk, "invalid expression exprRel1");
+
+        success("exprRel1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprRel1\n");
     return 1;
 }
 
@@ -1038,10 +1371,12 @@ int exprAdd(){
 
     if(exprMul()){
         if(!exprAdd1()) tkerr(crtTk, "invalid expression exprAdd");
+
+        success("exprAdd\n");
         return 1;
     }
 
-    crtTk = startTk;
+
     return 0;
 }
 int exprAdd1(){
@@ -1051,10 +1386,12 @@ int exprAdd1(){
     if(consume(ADD) || consume(SUB)){
         if(!exprMul()) tkerr(crtTk, "invalid expression exprAdd1");
         if(!exprAdd1()) tkerr(crtTk, "invalid expression exprAdd1");
+
+        success("exprAdd1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprAdd1\n");
     return 1;
 }
 
@@ -1068,9 +1405,12 @@ int exprMul(){
 
     if(exprCast()){
         if(!exprMul1()) tkerr(crtTk, "invalid expression exprMul");
+
+        success("exprMul\n");
+        return 1;
     }
 
-    crtTk = startTk;
+
     return 0;
 }
 int exprMul1(){
@@ -1080,10 +1420,12 @@ int exprMul1(){
     if(consume(MUL) || consume(DIV)){
         if(!exprCast()) tkerr(crtTk, "invalid expression exprMul1");
         if(!exprMul1()) tkerr(crtTk, "invalid expression exprMul1");
+
+        success("exprMul1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprMul1\n");
     return 1;
 }
 
@@ -1097,14 +1439,17 @@ int exprCast(){
         if(!typeName()) tkerr(crtTk, "invalid expression exprCast");
         if(!consume(RPAR)) tkerr(crtTk, "invalid expression exprCast");
         if(!exprUnary()) tkerr(crtTk, "invalid expression exprCast");
+
+        success("exprCast\n");
         return 1;
     }
 
 
-    if(exprUnary())
+    if(exprUnary()){
+        success("exprCast\n");
         return 1;
+    }
 
-    crtTk = startTk;
     return 0;
 }
 
@@ -1117,13 +1462,18 @@ int exprUnary(){
 
     if(consume(SUB) || consume(NOT)){
         if(!exprUnary) tkerr(crtTk, "invalid expression exprUnary");
+
+        success("exprUnary\n");
         return 1;
     }
 
-    if(exprPostfix())
+    if(exprPostfix()){
+        success("exprUnary\n");
         return 1;
+    }
 
-    crtTk = startTk;
+
+
     return 0;
 }
 
@@ -1138,10 +1488,11 @@ int exprPostfix(){
 
     if(exprPrimary()){
         if(!exprPostfix1()) tkerr(crtTk, "invalid expression exprPostfix");
+
+        success("exprPostfix\n");
         return 1;
     }
 
-    crtTk = startTk;
     return 0;
 }
 int exprPostfix1(){
@@ -1152,16 +1503,20 @@ int exprPostfix1(){
         if(!expr()) tkerr(crtTk, "invalid expression exprPostfix1");
         if(!consume(RBRACKET)) tkerr(crtTk, "invalid expression exprPostfix1");
         if(!exprPostfix1()) tkerr(crtTk, "invalid expression exprPostfix1");
+
+        success("exprPostfix1\n");
         return 1;
     }
 
     if(consume(DOT)){
         if(!consume(ID)) tkerr(crtTk, "invalid expression exprPostfix1");
         if(!exprPostfix1()) tkerr(crtTk, "invalid expression exprPostfix1");
+
+        success("exprPostfix1\n");
         return 1;
     }
 
-    crtTk = startTk;
+    success("exprPostfix1\n");
     return 1;
 }
 
@@ -1190,6 +1545,8 @@ int exprPrimary(){
 
             if(!consume(RPAR)) tkerr(crtTk, "invalid expression exprPrimary");
         }
+
+        success("exprPrimary\n");
         return 1;
     }
 
@@ -1202,70 +1559,10 @@ int exprPrimary(){
         if(!expr()) tkerr(crtTk, "invalid expression exprPrimary");
         if(!consume(RPAR)) tkerr(crtTk, "invalid expression exprPrimary");
 
+        success("exprPrimary\n");
         return 1;
     }
 
-    crtTk = startTk;
-    return 0;
-}
-
-int ruleWhile(){
-    Token *startTk = crtTk;
-
-    print("ruleWhile\n");
-
-    if(consume(WHILE)){
-        if(!consume(LPAR))tkerr(crtTk,"missing ( after while");
-        //if(!expr())tkerr(crtTk,"invalid expression after (");
-        if(!consume(RPAR))tkerr(crtTk,"missing )");
-
-        if(!stm())tkerr(crtTk,"missing while statement");
-        return 1;
-    }
-
-    crtTk = startTk;
-    return 0;
-}
-
-
-int stmCompound()
-{
-    print("stmCompound\n");
-
-    Token *startTk = crtTk;
-
-    if(consume(LACC)){
-        for(;;){
-            if(declVar()){
-            }
-            else if(stm()){
-            }
-            else break;
-        }
-
-        if(!consume(RACC))tkerr(crtTk,"missing } or syntax error stmCompound");
-        return 1;
-    }
-
-    crtTk = startTk;
-    return 0;
-}
-
-int stm(){
-    print("stm\n");
-    Token *startTk = crtTk;
-
-    if(stmCompound()){
-        return 1;
-    }
-    if(ruleWhile()){
-        printf("read while\n");
-        return 1;
-    }
-
-    expr();
-    if(!consume(SEMICOLON)) tkerr(crtTk,"missing ; or syntax error stm");
-
-    crtTk = startTk;
+    //crtTk = startTk;
     return 0;
 }

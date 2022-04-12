@@ -1,1 +1,6 @@
-while () { int a; a=2;}
+if(1){
+    int c;
+}
+else{
+    a = 1;
+}
