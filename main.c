@@ -222,9 +222,10 @@ int getNextToken(){
                     pCrtCh++;
                     state = 22; /// Start of CT_CHAR;
                 }
-                else if(ch == '\"'){
+                else if(ch == '"'){
+                    printf("SEX");
                     pCrtCh++;
-                    state = -1; /// Start of CT_STRING;
+                    state = 31; /// Start of CT_STRING;
                 }
                 else if(isdigit(ch)){ /// INT or REAL
                     pStartCh = pCrtCh; /// set start
@@ -338,7 +339,12 @@ int getNextToken(){
                     pCrtCh++;
                     state = 10;
                 }
+                else if (ch == '.'){
+                    pCrtCh++;
+                    state = 16;
+                }
                 else{ /// number is just "0"
+
                     base = 8;
                     state = 7;
                 }
@@ -356,6 +362,7 @@ int getNextToken(){
                 else if(ch == '.'){
                     pCrtCh++;
                     state = 16;
+
                 }
                 else if(ch == 'e' || ch == 'E'){
                     pCrtCh++;
@@ -623,6 +630,97 @@ int getNextToken(){
                 }
             }
 
+            case 31:{
+                if(ch == '\\'){
+                    pCrtCh++;
+                    state = 32;
+                }
+                else if(ch == '\"'){
+                    pCrtCh++;
+                    state = 33;
+                }
+                else {
+                    pCrtCh++;
+                }
+
+                break;
+            }
+
+            case 32:{
+                switch(ch){
+                    case 'a':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 'b':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 'f':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 'n':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 'r':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 't':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case 'v':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case '\'':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case '?':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case '\"':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case '\\':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    case '0':{
+                        pCrtCh++;
+                        state = 31;
+                        break;
+                    }
+                    default: {
+                        tkerr(addTk(END), "invalid character s32");
+                        break;
+                    }
+                }
+                break;
+            }
+
+            case 33:{
+                addTk(CT_STRING);
+                return CT_STRING;
+            }
+
             /// VVVVVVVVVV ///
             /// DELIMITORS ///
             /// VVVVVVVVVV ///
@@ -779,6 +877,8 @@ int consume(int code){
     return 0;
 }
 
+int unit();
+
 int ruleIf();
 int ruleWhile();
 int ruleFor();
@@ -861,7 +961,7 @@ void success(char s[]){
 
 int main()
 {
-    FILE *f = fopen("9.c", "rb");
+    FILE *f = fopen("5.c", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
