@@ -223,7 +223,6 @@ int getNextToken(){
                     state = 22; /// Start of CT_CHAR;
                 }
                 else if(ch == '"'){
-                    printf("SEX");
                     pCrtCh++;
                     state = 31; /// Start of CT_STRING;
                 }
@@ -941,7 +940,7 @@ void printTokens(Token *head){
     }
 }
 
-int DEBUG = 0, SUCCESS = 1;
+int DEBUG = 0, SUCCESS = 0;
 
 /// prints when entering a state with current code
 void print(char s[]){
@@ -961,7 +960,7 @@ void success(char s[]){
 
 int main()
 {
-    FILE *f = fopen("5.c", "rb");
+    FILE *f = fopen("2.c", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
