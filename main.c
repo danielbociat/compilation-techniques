@@ -48,6 +48,46 @@ typedef struct _Token{
     struct _Token *next;
 }Token;
 
+
+enum {TB_INT, TB_DOUBLE, TB_CHAR, TB_STRUCT, TB_VOID};
+const char* TB[] = {"TB_INT", "TB_DOUBLE", "TB_CHAR", "TB_STRUCT", "TB_VOID"};
+
+typedef struct _Typr Type;
+typedef struct _Symbol Symbol;
+typedef struct _Symbols Symbols;
+
+struct _Type{
+    int typeBase;
+    struct _Symbol *s;
+    int nElements;
+};
+
+enum {CLS_VAR, CLS_FUNC, CLS_EXTFUNC, CLS_STRUCT};
+const char* CLS[] = {"CLS_VAR", "CLS_FUNC", "CLS_EXTFUNC", "CLS_STRUCT"};
+
+enum {MEM_GLOBAL, MEM_ARG, MEM_LOCAL};
+const char* MEM[] = {"MEM_GLOBAL", "MEM_ARG", "MEM_LOCAL"};
+
+struct _Symbol{
+    const char *name;
+    int cls;
+    int mem;
+    Type type;
+    int depth;
+    union{
+        struct _Symbols args;
+        struct _Symbols *members;
+    };
+};
+
+struct _Symbols{
+    Symbol **begin;
+    Symbol **end;
+    Symbol **after;
+};
+
+Symbols symbols;
+
 void tkerr(const Token *tk, const char *fmt, ...){
     va_list va;
     va_start(va, fmt);
