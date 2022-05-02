@@ -1,9 +1,9 @@
 #include <bits/stdc++.h>
+#include "symbol.h"
+
 using namespace std;
 
 #define SAFEALLOC(var, Type) if((var = (Type *)malloc(sizeof(Type)))==NULL) err("not enough memory")
-
-
 
 #define BLOCK_SIZE 512
 
@@ -36,7 +36,6 @@ enum {END, ID,
 typedef struct _Token{
     int code;
     union{
-        char c;
         char *text;
         long int i;
         double r;
@@ -873,6 +872,8 @@ int consume(int code){
     return 0;
 }
 
+
+/// Syntactic Analyzer Functions ///
 int unit();
 
 int ruleIf();
@@ -912,7 +913,72 @@ int exprUnary();
 int exprPostfix();
 int exprPostfix1();
 int exprPrimary();
+/// END OF - Syntactic Analyzer Functions ///
 
+
+/// Symbols ///
+enum {TB_INT, TB_DOUBLE, TB_CHAR, TB_STRUCT, TB_VOID};
+const char* TB[] = {"TB_INT", "TB_DOUBLE", "TB_CHAR", "TB_STRUCT", "TB_VOID"};
+
+enum {CLS_VAR, CLS_FUNC, CLS_EXTFUNC, CLS_STRUCT};
+const char* CLS[] = {"CLS_VAR", "CLS_FUNC", "CLS_EXTFUNC", "CLS_STRUCT"};
+
+enum {MEM_GLOBAL, MEM_ARG, MEM_LOCAL};
+const char* MEM[] = {"MEM_GLOBAL", "MEM_ARG", "MEM_LOCAL"};
+
+vector <Symbol*> symbols;
+int crtDepth = 0;
+
+Symbol* addSymbol(vector <Symbol*>& symbols, const char *name, int cls){
+    Symbol *s = new Symbol();
+    s -> name = name;
+    s -> cls = cls;
+    s -> depth = crtDepth;
+    symbols.push_back(s);
+    return s;
+}
+
+
+Symbol* findSymbol(vector <Symbol*>& symbols, const char *name){
+    Symbol* found;
+    for(int i = symbols.size() - 1; i >= 0; i--){
+        found = symbols[i];
+        if(strcmp(found->name, name) == 0)
+            return found;
+    }
+    return NULL;
+}
+
+void deleteSymbolsAfter(vector <Symbol*>& symbols, Symbol* symbol){
+    while(symbols.size() > 0 && symbols.back() != symbol){
+        Symbol* s = symbols.back();
+        symbols.pop_back();
+        free(s);
+    }
+}
+
+void initSymbols(vector <Symbol*>& symbols){
+    symbols.clear();
+}
+/// END OF - Symbols ///
+
+/// DEBUG FUNCTIONS ///
+
+int DEBUG = 0, SUCCESS = 0;
+/// prints when entering a state with current code
+void print(string s){
+    if(DEBUG){
+        cout << s << '\n';
+        cout << "CRT CODE: " << codes[crtTk->code] << "\n";
+    }
+}
+
+/// prints when a state returns 1
+void success(string s){
+    if(SUCCESS){
+        cout << "\nSUCCESSFULY READ: " << s;
+    }
+}
 
 void printTokens(Token *head){
     Token *current = head;
@@ -934,23 +1000,6 @@ void printTokens(Token *head){
         }
 
         current = current->next;
-    }
-}
-
-int DEBUG = 0, SUCCESS = 0;
-
-/// prints when entering a state with current code
-void print(string s){
-    if(DEBUG){
-        cout << s << '\n';
-        cout << "CRT CODE: " << codes[crtTk->code] << "\n";
-    }
-}
-
-/// prints when a state returns 1
-void success(string s){
-    if(SUCCESS){
-        cout << "\nSUCCESSFULY READ: " << s;
     }
 }
 
@@ -1545,7 +1594,6 @@ int exprCast(){
         return 1;
     }
 
-
     if(exprUnary()){
         success("exprCast\n");
         return 1;
@@ -1572,8 +1620,6 @@ int exprUnary(){
         success("exprUnary\n");
         return 1;
     }
-
-
 
     return 0;
 }
@@ -1664,6 +1710,5 @@ int exprPrimary(){
         return 1;
     }
 
-    //crtTk = startTk;
     return 0;
 }
