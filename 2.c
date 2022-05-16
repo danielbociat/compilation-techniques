@@ -1,3 +1,4 @@
+/*** commm *** fnujdnf ***/
 void main()
 {
 	int		x;
@@ -5,3 +6,5 @@ void main()
 	x=get_i();
 	put_i(x);
 }
+
+// dffsd

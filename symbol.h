@@ -2,9 +2,6 @@
 
 #ifndef SYMBOL_H_INCLUDED
 #define SYMBOL_H_INCLUDED
-
-
-
 #endif // SYMBOL_H_INCLUDED
 
 typedef struct _Type Type;

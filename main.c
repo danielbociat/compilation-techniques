@@ -72,11 +72,11 @@ struct _Symbol{
     const char *name;
     int cls;
     int mem;
-    Type type;
+    //Type type;
     int depth;
     union{
-        struct _Symbols args;
-        struct _Symbols *members;
+        //struct _Symbols args;
+        //struct _Symbols *members;
     };
 };
 
@@ -980,13 +980,13 @@ void printTokens(Token *head){
     }
 }
 
-int DEBUG = 0, SUCCESS = 0;
+int DEBUG = 1, SUCCESS = 0;
 
 /// prints when entering a state with current code
 void print(char s[]){
     if(DEBUG){
         printf("\n%s", s);
-        printf("CRT CODE: %s\n", codes[crtTk->code]);
+        //printf("CRT CODE: %s\n", codes[crtTk->code]);
 
     }
 }
@@ -1000,7 +1000,7 @@ void success(char s[]){
 
 int main()
 {
-    FILE *f = fopen("2.c", "rb");
+    FILE *f = fopen("0.c", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
@@ -1711,3 +1711,6 @@ int exprPrimary(){
     //crtTk = startTk;
     return 0;
 }
+
+
+
