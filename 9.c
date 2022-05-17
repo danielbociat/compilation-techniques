@@ -2,7 +2,7 @@ struct Pt{
 	int x,y;
 	};
 
-struct Pt		points[20/4+5];
+struct Pt		points[20];
 
 int		count()
 {
@@ -15,5 +15,5 @@ int		count()
 
 void main()
 {
-	put_i(count());
+	//put_i(count());
 }

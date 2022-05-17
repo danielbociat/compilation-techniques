@@ -6,6 +6,7 @@ using namespace std;
 #define SAFEALLOC(var, Type) if((var = (Type *)malloc(sizeof(Type)))==NULL) err("not enough memory")
 
 #define BLOCK_SIZE 512
+#define STACK_SIZE (32 * 1024)
 
 void err(const char *fmt, ...){
     va_list va;
@@ -1002,6 +1003,7 @@ void deleteSymbolsAfter(vector <Symbol*>& symbols, Symbol* symbol){
 void initSymbols(vector <Symbol*>& symbols){
     symbols.clear();
 }
+
 /// END OF - Symbols ///
 
 /// TYPE ///
@@ -1088,7 +1090,7 @@ int typeBase(Type& ret);
 
 
 void put_s(char s[]);
-void get_s(char s[]);
+void get_str(char s[]);
 void put_i(int i);
 int get_i();
 void put_d(double d);
@@ -1171,11 +1173,14 @@ void addVar(Token *tkName,Type t){
 
     s->type=t;
 }
-/**
+
 void addExtFunctions(){
     Symbol *s;
     s = addExtFunc("put_s", createType(TB_VOID, -1), (void*)put_s);
     addFuncArg(s,"s",createType(TB_CHAR,0));
+
+    s = addExtFunc("get_str", createType(TB_VOID, -1), (void*)get_str);
+    addFuncArg(s, "s", createType(TB_CHAR, 0));
 
     s = addExtFunc("put_i", createType(TB_VOID, -1), (void*)put_i);
     addFuncArg(s, "i", createType(TB_INT, -1));
@@ -1193,18 +1198,105 @@ void addExtFunctions(){
     s = addExtFunc("get_c", createType(TB_CHAR, -1), (void*)get_c);
 
     s = addExtFunc("seconds", createType(TB_DOUBLE, -1), (void*)seconds);
-
-
-    s = addExtFunc("get_s", createType(TB_VOID, -1), (void*)get_s);
-    addFuncArg(s, "s", createType(TB_CHAR, 0));
 }
-**/
+
+/// MV ///
+
+char stk[STACK_SIZE];
+char *SP;
+char *stackAfter;
+
+void pushd(double d){
+    if(SP + sizeof(double) > stackAfter) err("out of stack");
+    *(double*)SP = d;
+    SP += sizeof(double);
+}
+
+double popd(){
+    SP -= sizeof(double);
+    if(SP < stk) err("not enough stack bytes for popd");
+    return *(double*)SP;
+}
+
+void pusha(void* a){
+    if(SP + sizeof(void *) > stackAfter) err("out of stack");
+    *(void**)SP = a;
+    SP += sizeof(void*);
+}
+
+void *popa(){
+    SP -= sizeof(void*);
+    if(SP < stk) err("not enough stack bytes for popd");
+    return *(void**)SP;
+}
+
+
+enum {O_ADD_C, O_ADD_D, O_ADD_I,
+    O_AND_A, O_AND_C, O_AND_D, O_AND_I,
+    O_CALL, O_CALLEXT,
+    O_CAST_C_D, O_CAST_C_I, O_CAST_D_C, O_CAST_D_I, O_CAST_I_C, O_CAST_I_D,
+    O_DIV_C, O_DIV_D, O_DIV_I,
+    O_DROP, O_ENTER,
+    O_EQ_A, O_EQ_C, O_EQ_D, O_EQ_I,
+    O_GREATER_C, O_GREATER_D, O_GREATER_I,
+    O_GREATEREQ_C, O_GREATEREQ_D, O_GREATEREQ_I,
+    O_HALT, O_INSERT,
+    O_JF_A, O_JF_C, O_JF_D, O_JF_I,
+    O_JMP,
+    O_JT_A, O_JT_C, O_JT_D, O_JT_I,
+    O_LESS_C, O_LESS_D, O_LESS_I,
+    O_LESSEQ_C, O_LESSEQ_D, O_LESSEQ_I,
+    O_LOAD,
+    O_MUL_C, O_MUL_D, O_MUL_I,
+    O_NEG_C, O_NEG_D, O_NEG_I,
+    O_NOP,
+    O_NOT_A, O_NOT_C, O_NOT_D, O_NOT_I,
+    O_NOTEQ_A, O_NOTEQ_C, O_NOTEQ_D, O_NOTEQ_I,
+    O_OFFSET,
+    O_OR_A, O_OR_C, O_OR_D, O_OR_I,
+    O_PUSHFPADDR,
+    O_PUSHCT_A, O_PUSHCT_C, O_PUSHCT_D, O_PUSHCT_I,
+    O_RET, O_STORE,
+    O_SUB_C, O_SUB_D, O_SUB_I
+};
+
+const char* opcodes[] = {"O_ADD_C", "O_ADD_D", "O_ADD_I",
+    "O_AND_A", "O_AND_C", "O_AND_D", "O_AND_I",
+    "O_CALL", "O_CALLEXT",
+    "O_CAST_C_D", "O_CAST_C_I", "O_CAST_D_C", "O_CAST_D_I", "O_CAST_I_C", "O_CAST_I_D",
+    "O_DIV_C", "O_DIV_D", "O_DIV_I",
+    "O_DROP", "O_ENTER",
+    "O_EQ_A", "O_EQ_C", "O_EQ_D", "O_EQ_I",
+    "O_GREATER_C", "O_GREATER_D", "O_GREATER_I",
+    "O_GREATEREQ_C", "O_GREATEREQ_D", "O_GREATEREQ_I",
+    "O_HALT", "O_INSERT",
+    "O_JF_A", "O_JF_C", "O_JF_D", "O_JF_I",
+    "O_JMP",
+    "O_JT_A", "O_JT_C", "O_JT_D", "O_JT_I",
+    "O_LESS_C", "O_LESS_D", "O_LESS_I",
+    "O_LESSEQ_C", "O_LESSEQ_D", "O_LESSEQ_I",
+    "O_LOAD",
+    "O_MUL_C", "O_MUL_D", "O_MUL_I",
+    "O_NEG_C", "O_NEG_D", "O_NEG_I",
+    "O_NOP",
+    "O_NOT_A", "O_NOT_C", "O_NOT_D", "O_NOT_I",
+    "O_NOTEQ_A", "O_NOTEQ_C", "O_NOTEQ_D", "O_NOTEQ_I",
+    "O_OFFSET",
+    "O_OR_A", "O_OR_C", "O_OR_D","O_OR_I",
+    "O_PUSHFPADDR",
+    "O_PUSHCT_A", "O_PUSHCT_C", "O_PUSHCT_D", "O_PUSHCT_I",
+    "O_RET", "O_STORE",
+    "O_SUB_C", "O_SUB_D", "O_SUB_I"
+};
+
+/// END OF MV ///
+
 
 int main()
 {
-    //addExtFunctions();
+    addExtFunctions();
 
-    FILE *f = fopen("0.c", "rb");
+    FILE *f = fopen("9.c", "rb");
 
     fseek(f, 0, SEEK_END);
     int size = ftell(f);
