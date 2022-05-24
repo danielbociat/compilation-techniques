@@ -31,6 +31,11 @@ struct _Symbol{
         std::vector<Symbol*> members; // used only for structs
     };
 
+    union{
+        void *addr;
+        int offset;
+    };
+
     _Symbol(){
     }
 };
