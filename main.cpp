@@ -57,7 +57,7 @@ void tkerr(const Token *tk, const char *fmt, ...){
     exit(-1);
 }
 
-int line = 0;
+int line = 0, offset, sizeArgs;
 Token *lastToken = NULL;
 Token *tokens = NULL;
 
@@ -85,6 +85,7 @@ string ct_str;
 int getNextToken(){
     int state = 0, nCh;
     char ch;
+    long int c;
     const char *pStartCh;
     Token *tk;
 
@@ -528,6 +529,7 @@ int getNextToken(){
                     state = 23;
                 }
                 else{
+                    c = ch;
                     pCrtCh++;
                     state = 24;
                 }
@@ -538,61 +540,73 @@ int getNextToken(){
                 switch(ch){
                     case 'a':{
                         pCrtCh++;
+                        c = '\a';
                         state = 24;
                         break;
                     }
                     case 'b':{
                         pCrtCh++;
+                        c = '\b';
                         state = 24;
                         break;
                     }
                     case 'f':{
                         pCrtCh++;
+                        c = '\f';
                         state = 24;
                         break;
                     }
                     case 'n':{
                         pCrtCh++;
+                        c = '\n';
                         state = 24;
                         break;
                     }
                     case 'r':{
                         pCrtCh++;
+                        c = '\r';
                         state = 24;
                         break;
                     }
                     case 't':{
                         pCrtCh++;
+                        c = '\t';
                         state = 24;
                         break;
                     }
                     case 'v':{
                         pCrtCh++;
+                        c = '\v';
                         state = 24;
                         break;
                     }
                     case '\'':{
                         pCrtCh++;
+                        c = '\'';
                         state = 24;
                         break;
                     }
                     case '?':{
                         pCrtCh++;
+                        c = '\?';
                         state = 24;
                         break;
                     }
                     case '\"':{
                         pCrtCh++;
+                        c = '\"';
                         state = 24;
                         break;
                     }
                     case '\\':{
                         pCrtCh++;
+                        c = '\\';
                         state = 24;
                         break;
                     }
                     case '0':{
                         pCrtCh++;
+                        c = '\0';
                         state = 24;
                         break;
                     }
@@ -614,6 +628,7 @@ int getNextToken(){
 
             case 25:{
                 tk = addTk(CT_CHAR);
+                tk->i = c;
                 return tk->code;
             }
 
@@ -913,47 +928,20 @@ typedef struct{
 }RetVal;
 
 
-/// Syntactic Analyzer Functions ///
-int unit();
 
-int ruleIf(RetVal& rv);
-int ruleWhile(RetVal& rv);
-int ruleFor();
-int ruleBreak();
-int ruleReturn();
 
-int declStruct();
-int declVar();
-int typeBase(Type& type);
-int arrayDecl(Type& type);
-int typeName();
 
-int declFunc();
-int funcArg();
+char globals[GLOBAL_SIZE];
+int nGlobals;
 
-int stm();
-int stmCompound();
+void *allocGlobal(int size){
+    void *p = globals+nGlobals;
 
-int expr(RetVal& rv);
-int exprAssign(RetVal& rv);
-int exprOr(RetVal& rv);
-int exprOr1(RetVal& rv);
-int exprAnd(RetVal& rv);
-int exprAnd1(RetVal& rv);
-int exprEq(RetVal& rv);
-int exprEq1(RetVal& rv);
-int exprRel(RetVal& rv);
-int exprRel1(RetVal& rv);
-int exprAdd(RetVal& rv);
-int exprAdd1(RetVal& rv);
-int exprMul(RetVal& rv);
-int exprMul1(RetVal& rv);
-int exprCast(RetVal& rv);
-int exprUnary(RetVal& rv);
-int exprPostfix(RetVal& rv);
-int exprPostfix1(RetVal& rv);
-int exprPrimary(RetVal& rv);
-/// END OF - Syntactic Analyzer Functions ///
+    if(nGlobals+size > GLOBAL_SIZE) err("insufficient globals space");
+
+    nGlobals += size;
+    return p;
+}
 
 
 /// Symbols ///
@@ -1026,11 +1014,43 @@ void initSymbols(vector <Symbol*>& symbols){
 
 /// TYPE ///
 
+int typeBaseSize(Type *type);
+int typeFullSize(Type *type);
+int typeArgSize(Type *type);
+
 Type createType(int typeBase, int nElements){
     Type t;
     t.typeBase = typeBase;
     t.nElements = nElements;
     return t;
+}
+
+int typeBaseSize(Type *type){
+    int size=0;
+    vector <Symbol*> :: iterator is;
+    switch(type->typeBase){
+        case TB_INT:size=sizeof(long int);break;
+        case TB_DOUBLE:size=sizeof(double);break;
+        case TB_CHAR:size=sizeof(char);break;
+        case TB_STRUCT:
+            for(is=type->s->members.begin();is!=type->s->members.end();is++){
+                size+=typeFullSize(&(*is)->type);
+            }
+            break;
+        case TB_VOID:size=0;break;
+        default:err("invalid typeBase: %d",type->typeBase);
+    }
+    return size;
+}
+
+int typeFullSize(Type *type){
+    return typeBaseSize(type)*(type->nElements>0?type->nElements:1);
+}
+
+int typeArgSize(Type *type){
+    if(type->nElements>=0)
+        return sizeof(void*);
+    return typeBaseSize(type);
 }
 
 void cast(Type *dst,Type *src)
@@ -1109,7 +1129,7 @@ int typeBase(Type& ret);
 
 /// DEBUG FUNCTIONS ///
 
-int DEBUG = 1, SUCCESS = 0;
+int DEBUG = 0, SUCCESS = 0;
 /// prints when entering a state with current code
 void print(string s){
     if(DEBUG){
@@ -1181,6 +1201,14 @@ void addVar(Token *tkName,Type t){
     }
 
     s->type=t;
+
+    if(crtStruct||crtFunc){
+        s->offset=offset;
+    }
+    else{
+        s->addr=allocGlobal(typeFullSize(&s->type));
+    }
+    offset+=typeFullSize(&s->type);
 }
 
 
@@ -1190,7 +1218,6 @@ void addVar(Token *tkName,Type t){
 char stk[STACK_SIZE];
 char *SP;
 char *stackAfter;
-
 
 void pushd(double d){
     if(SP + sizeof(double) > stackAfter) err("out of stack");
@@ -1242,7 +1269,7 @@ void *popa(){
 }
 
 void put_i(){
-    printf("#%d\n",popi());
+    printf("put_i -> %d\n",popi());
 }
 
 void get_i(){
@@ -1253,7 +1280,7 @@ void get_i(){
 
 void put_s(){
     char* s = (char*)popa();
-    printf("%s", s);
+    printf("put_s ->%s", s);
 }
 
 void get_str(){
@@ -1263,7 +1290,7 @@ void get_str(){
 
 void put_d(){
     double d = popd();
-    printf("%lf\n", d);
+    printf("put_d ->%lf\n", d);
 }
 
 void get_d(){
@@ -1274,7 +1301,7 @@ void get_d(){
 
 void put_c(){
     char c = popc();
-    printf("%c\n", c);
+    printf("put_c ->%c\n", c);
 }
 
 void get_c(){
@@ -1353,7 +1380,15 @@ typedef struct _Instr{
     }args[2];
     struct _Instr *last, *next;
 }Instr;
-Instr *instructions, *lastInstruction;
+Instr *instructions, *lastInstruction, *crtLoopEnd;
+
+void printInstr(){
+    Instr *curr = instructions;
+    while(curr != NULL){
+        cout << curr->opcode << ' ' << opcodes[curr->opcode] << '\n';
+        curr = curr->next;
+    }
+}
 
 Instr *createInstr(int opcode){
     Instr *i;
@@ -1422,7 +1457,7 @@ Instr *addInstrI(int opcode, long int val){
     return i;
 }
 
-Instr *addInstrI(int opcode, long int val1, long int val2){
+Instr *addInstrII(int opcode, long int val1, long int val2){
     Instr *i=createInstr(opcode);
 
     i->args[0].i = val1;
@@ -1439,6 +1474,19 @@ Instr *addInstrI(int opcode, long int val1, long int val2){
     return i;
 }
 
+Instr* appendInstr(Instr* i){
+    //printf("Added %d\n", i -> opcode);
+    i->next=NULL;
+    i->last=lastInstruction;
+    if(lastInstruction){
+        lastInstruction->next=i;
+    }else{
+        instructions=i;
+    }
+    lastInstruction=i;
+    return i;
+}
+
 void deleteInstructionsAfter(Instr* start){
     while(lastInstruction != NULL && lastInstruction != start){
         Instr* aux = lastInstruction;
@@ -1451,17 +1499,7 @@ void deleteInstructionsAfter(Instr* start){
     }
 }
 
-char globals[GLOBAL_SIZE];
-int nGlobals;
 
-void *allocGlobal(int size){
-    void *p = globals+nGlobals;
-
-    if(nGlobals+size > GLOBAL_SIZE) err("insufficient globals space");
-
-    nGlobals += size;
-    return p;
-}
 
 /// END OF MV ///
 
@@ -1527,14 +1565,14 @@ void run(Instr *IP)
                 cVal1 = popc();
                 cVal2 = popc();
                 pushc(cVal1 + cVal2);
-                //printf("ADD_C %d %d\n", cVal1, cVal2);
+                printf("ADD_C %d %d\n", cVal1, cVal2);
                 IP = IP -> next;
                 break;
             case O_ADD_D:{
                 double val1 = popd();
                 double val2 = popd();
                 pushd(val1 + val2);
-                //printf("ADD_D %lf %lf\n", (double)val1, (double)val2);
+                printf("ADD_D %lf %lf\n", (double)val1, (double)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1542,7 +1580,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 int val2 = popi();
                 pushi(val1 + val2);
-                //printf("ADD_I %d %d\n", val1, val2);
+                printf("ADD_I %d %d\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
@@ -1550,7 +1588,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 int val2 = popi();
                 pushi(val1 * val2);
-                //printf("MUL_I %d %d\n", val1, val2);
+                printf("MUL_I %d %d\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
@@ -1558,7 +1596,7 @@ void run(Instr *IP)
                 char val1 = popc();
                 char val2 = popc();
                 pushc(val1 * val2);
-                //printf("MUL_C %d %d\n", (int)val1, (int)val2);
+                printf("MUL_C %d %d\n", (int)val1, (int)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1566,7 +1604,7 @@ void run(Instr *IP)
                 double val1 = popd();
                 double val2 = popd();
                 pushd(val1 * val2);
-                //printf("MUL_D %lf %lf\n", (double)val1, (double)val2);
+                printf("MUL_D %lf %lf\n", (double)val1, (double)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1574,7 +1612,7 @@ void run(Instr *IP)
                 char val1 = popc();
                 //char val2 = popc();
                 pushc(-val1);
-                //printf("NEG_C %d", (int)val1);
+                printf("NEG_C %d", (int)val1);
                 IP = IP -> next;
                 break;
             }
@@ -1582,7 +1620,7 @@ void run(Instr *IP)
                 double val1 = popd();
                 //double val2 = popd();
                 pushd(-val1);
-                //printf("NEG_D %lf\n", (double)val1);
+                printf("NEG_D %lf\n", (double)val1);
                 IP = IP -> next;
                 break;
             }
@@ -1590,7 +1628,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 //int val2 = popi();
                 pushi(-val1);
-                //printf("NEG_I %d\n", val1);
+                printf("NEG_I %d\n", val1);
                 IP = IP -> next;
                 break;
             }
@@ -1598,7 +1636,7 @@ void run(Instr *IP)
                 char val1 = popc();
                 //char val2 = popc();
                 pushi(!val1);
-                //printf("NOT_C %d", (int)val1);
+                printf("NOT_C %d", (int)val1);
                 IP = IP -> next;
                 break;
             }
@@ -1606,7 +1644,7 @@ void run(Instr *IP)
                 double val1 = popd();
                 //double val2 = popd();
                 pushi(!val1);
-                //printf("NOT_D %lf\n", (double)val1);
+                printf("NOT_D %lf\n", (double)val1);
                 IP = IP -> next;
                 break;
             }
@@ -1614,7 +1652,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 //int val2 = popi();
                 pushi(!val1);
-                //printf("NOT_I %d\n", val1);
+                printf("NOT_I %d\n", val1);
                 IP = IP -> next;
                 break;
             }
@@ -1622,7 +1660,7 @@ void run(Instr *IP)
                 void* val1 = popa();
                 //int val2 = popi();
                 pushi(!val1);
-                //printf("NOT_A %p\n", val1);
+                printf("NOT_A %p\n", val1);
                 IP = IP -> next;
                 break;
             }
@@ -1630,7 +1668,7 @@ void run(Instr *IP)
                 char val1 = popc();
                 char val2 = popc();
                 pushi(val1 && val2);
-                //printf("AND_C %d %d\n", (int)val1, (int)val2);
+                printf("AND_C %d %d\n", (int)val1, (int)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1638,7 +1676,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 int val2 = popi();
                 pushi(val1 && val2);
-                //printf("AND_I %d %d\n", (int)val1, (int)val2);
+                printf("AND_I %d %d\n", (int)val1, (int)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1646,7 +1684,7 @@ void run(Instr *IP)
                 void* val1 = popa();
                 void* val2 = popa();
                 pushi(val1 && val2);
-                //printf("AND_A %p %p\n", val1, val2);
+                printf("AND_A %p %p\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
@@ -1654,7 +1692,7 @@ void run(Instr *IP)
                 double val1 = popd();
                 double val2 = popd();
                 pushi(val1 && val2);
-                //printf("AND_D %lf %lf\n", val1, val2);
+                printf("AND_D %lf %lf\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
@@ -1663,7 +1701,7 @@ void run(Instr *IP)
                 char val1 = popc();
                 char val2 = popc();
                 pushi(val1 || val2);
-                //printf("OR_C %d %d\n", (int)val1, (int)val2);
+                printf("OR_C %d %d\n", (int)val1, (int)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1671,7 +1709,7 @@ void run(Instr *IP)
                 int val1 = popi();
                 int val2 = popi();
                 pushi(val1 || val2);
-                //printf("OR_I %d %d\n", (int)val1, (int)val2);
+                printf("OR_I %d %d\n", (int)val1, (int)val2);
                 IP = IP -> next;
                 break;
             }
@@ -1679,7 +1717,7 @@ void run(Instr *IP)
                 void* val1 = popa();
                 void* val2 = popa();
                 pushi(val1 || val2);
-                //printf("OR_A %p %p\n", val1, val2);
+                printf("OR_A %p %p\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
@@ -1687,95 +1725,95 @@ void run(Instr *IP)
                 double val1 = popd();
                 double val2 = popd();
                 pushi(val1 || val2);
-                //printf("OR_D %lf %lf\n", val1, val2);
+                printf("OR_D %lf %lf\n", val1, val2);
                 IP = IP -> next;
                 break;
             }
             case O_CALL:{
                 aVal1=(char*)IP->args[0].addr;
-                //printf("CALL\t%p\n",aVal1);
+                printf("CALL\t%p\n",aVal1);
                 pusha(IP->next);
                 IP=(Instr*)aVal1;
                 break;
             }
             case O_CALLEXT:
-                //printf("CALLEXT\t%p\n",IP->args[0].addr);
+                printf("CALLEXT\t%p\n",IP->args[0].addr);
                 (*(void(*)())IP->args[0].addr)();
                 IP=IP->next;
                 break;
             case O_CAST_I_D:
                 iVal1=popi();
                 dVal1=(double)iVal1;
-                //printf("CAST_I_D\t(%ld -> %g)\n",iVal1,dVal1);
+                printf("CAST_I_D\t(%ld -> %g)\n",iVal1,dVal1);
                 pushd(dVal1);
                 IP=IP->next;
                 break;
             case O_CAST_I_C:
                 iVal1=popi();
                 cVal1=(char)iVal1;
-                //printf("CAST_I_C\t(%d -> %c)\n",iVal1,dVal1);
+                printf("CAST_I_C\t(%d -> %c)\n",iVal1,dVal1);
                 pushc(cVal1);
                 IP=IP->next;
                 break;
             case O_CAST_D_I:
                 dVal1=popd();
                 iVal1=(int)dVal1;
-                //printf("CAST_D_I\t(%lf -> %d)\n",dVal1,iVal1);
+                printf("CAST_D_I\t(%lf -> %d)\n",dVal1,iVal1);
                 pushi(iVal1);
                 IP=IP->next;
                 break;
             case O_CAST_D_C:
                 dVal1=popd();
                 cVal1=(char)dVal1;
-                //printf("CAST_D_C\t(%lf -> %c)\n",dVal1,cVal1);
+                printf("CAST_D_C\t(%lf -> %c)\n",dVal1,cVal1);
                 pushc(cVal1);
                 IP=IP->next;
                 break;
             case O_CAST_C_D:
                 cVal1=popc();
                 dVal1=(double)cVal1;
-                //printf("CAST_C_D\t(%c -> %lf)\n",cVal1,dVal1);
+                printf("CAST_C_D\t(%c -> %lf)\n",cVal1,dVal1);
                 pushd(dVal1);
                 IP=IP->next;
                 break;
             case O_CAST_C_I:
                 cVal1=popc();
                 iVal1=(int)cVal1;
-                //printf("CAST_C_I\t(%c -> %d)\n",cVal1,iVal1);
+                printf("CAST_C_I\t(%c -> %d)\n",cVal1,iVal1);
                 pushi(iVal1);
                 IP=IP->next;
                 break;
             case O_DIV_C:{
                 char a = popc();
                 char b = popc();
-                //printf("DIV_C %c %c\n", a, b);
+                printf("DIV_C %c %c\n", a, b);
                 pushc(b / a);
                 break;
             }
             case O_DIV_I:{
                 int a = popi();
                 int b = popi();
-                //printf("DIV_I %d %d\n", a, b);
+                printf("DIV_I %d %d\n", a, b);
                 pushi(b / a);
                 break;
             }
             case O_DIV_D:{
                 double a = popd();
                 double b = popd();
-                //printf("DIV_D %lf %lf\n", a, b);
+                printf("DIV_D %lf %lf\n", a, b);
                 pushd(b / a);
                 break;
             }
             case O_DROP:
                 iVal1=IP->args[0].i;
-                //printf("DROP\t%ld\n",iVal1);
+                printf("DROP\t%ld\n",iVal1);
                 if(SP-iVal1<stk)err("not enough stack bytes");
                 SP-=iVal1;
                 IP=IP->next;
                 break;
             case O_ENTER:
                 iVal1=IP->args[0].i;
-                //printf("ENTER\t%ld\n",iVal1);
+                printf("ENTER\t%ld\n",iVal1);
                 pusha(FP);
                 FP=SP;
                 SP+=iVal1;
@@ -1784,66 +1822,66 @@ void run(Instr *IP)
             case O_EQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("EQ_D\t(%g==%g -> %ld)\n",dVal2,dVal1,dVal2==dVal1);
+                printf("EQ_D\t(%g==%g -> %ld)\n",dVal2,dVal1,dVal2==dVal1);
                 pushi(dVal2==dVal1);
                 IP=IP->next;
                 break;
             case O_EQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("EQ_C\t(%c==%c -> %ld)\n",cVal2,cVal1,cVal2==cVal1);
+                printf("EQ_C\t(%c==%c -> %ld)\n",cVal2,cVal1,cVal2==cVal1);
                 pushi(cVal2==cVal1);
                 IP=IP->next;
                 break;
             case O_EQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("EQ_I\t(%d==%d -> %ld)\n",iVal2,iVal1,iVal2==iVal1);
+                printf("EQ_I\t(%d==%d -> %ld)\n",iVal2,iVal1,iVal2==iVal1);
                 pushi(iVal2==iVal1);
                 IP=IP->next;
                 break;
             case O_EQ_A:
                 aVal1=(char*)popa();
                 aVal2=(char*)popa();
-                //printf("EQ_A\t(%p==%p -> %ld)\n",aVal2,aVal1,aVal2==aVal1);
+                printf("EQ_A\t(%p==%p -> %ld)\n",aVal2,aVal1,aVal2==aVal1);
                 pushi(aVal2==aVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("NOTEQ_D\t(%g!=%g -> %ld)\n",dVal2,dVal1,dVal2!=dVal1);
+                printf("NOTEQ_D\t(%g!=%g -> %ld)\n",dVal2,dVal1,dVal2!=dVal1);
                 pushi(dVal2!=dVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("NOTEQ_C\t(%c!=%c -> %ld)\n",cVal2,cVal1,cVal2!=cVal1);
+                printf("NOTEQ_C\t(%c!=%c -> %ld)\n",cVal2,cVal1,cVal2!=cVal1);
                 pushi(cVal2!=cVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("NOTEQ_I\t(%d!=%d -> %ld)\n",iVal2,iVal1,iVal2!=iVal1);
+                printf("NOTEQ_I\t(%d!=%d -> %ld)\n",iVal2,iVal1,iVal2!=iVal1);
                 pushi(iVal2!=iVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_A:
                 aVal1=(char*)popa();
                 aVal2=(char*)popa();
-                //printf("NOTEQ_A\t(%p!=%p -> %ld)\n",aVal2,aVal1,aVal2!=aVal1);
+                printf("NOTEQ_A\t(%p!=%p -> %ld)\n",aVal2,aVal1,aVal2!=aVal1);
                 pushi(aVal2!=aVal1);
                 IP=IP->next;
                 break;
             case O_HALT:
-                //printf("HALT\n");
+                printf("HALT\n");
                 return;
             case O_INSERT:
                 iVal1=IP->args[0].i; // iDst
                 iVal2=IP->args[1].i; // nBytes
-                //printf("INSERT\t%ld,%ld\n",iVal1,iVal2);
+                printf("INSERT\t%ld,%ld\n",iVal1,iVal2);
                 if(SP+iVal2>stackAfter)err("out of stack");
                 memmove(SP-iVal1+iVal2,SP-iVal1,iVal1); //make room
                 memmove(SP-iVal1,SP+iVal2,iVal2); //dup
@@ -1853,136 +1891,136 @@ void run(Instr *IP)
             case O_GREATER_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("GREATER_D\t(%g > %g -> %ld)\n",dVal2,dVal1,dVal2 > dVal1);
+                printf("GREATER_D\t(%g > %g -> %ld)\n",dVal2,dVal1,dVal2 > dVal1);
                 pushi(dVal2 > dVal1);
                 IP=IP->next;
                 break;
             case O_GREATER_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("GREATER_C\t(%c > %c -> %ld)\n",cVal2,cVal1,cVal2 > cVal1);
+                printf("GREATER_C\t(%c > %c -> %ld)\n",cVal2,cVal1,cVal2 > cVal1);
                 pushi(cVal2 > cVal1);
                 IP=IP->next;
                 break;
             case O_GREATER_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("GREATER_I\t(%d > %d -> %ld)\n",iVal2,iVal1,iVal2 > iVal1);
+                printf("GREATER_I\t(%d > %d -> %ld)\n",iVal2,iVal1,iVal2 > iVal1);
                 pushi(iVal2 > iVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("GREATEREQ_D\t(%g >= %g -> %ld)\n",dVal2,dVal1,dVal2 >= dVal1);
+                printf("GREATEREQ_D\t(%g >= %g -> %ld)\n",dVal2,dVal1,dVal2 >= dVal1);
                 pushi(dVal2 >= dVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("GREATEREQ_C\t(%c >= %c -> %ld)\n",cVal2,cVal1,cVal2 >= cVal1);
+                printf("GREATEREQ_C\t(%c >= %c -> %ld)\n",cVal2,cVal1,cVal2 >= cVal1);
                 pushi(cVal2 >= cVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("GREATEREQ_I\t(%d >= %d -> %ld)\n",iVal2,iVal1,iVal2 >= iVal1);
+                printf("GREATEREQ_I\t(%d >= %d -> %ld)\n",iVal2,iVal1,iVal2 >= iVal1);
                 pushi(iVal2 >= iVal1);
                 IP=IP->next;
                 break;
 
             case O_JT_I:
                 iVal1=popi();
-                //printf("JT\t%p\t(%ld)\n",IP->args[0].addr,iVal1);
+                printf("JT\t%p\t(%ld)\n",IP->args[0].addr,iVal1);
                 IP=iVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JT_C:
                 cVal1=popc();
-                //printf("JT\t%p\t(%c)\n",IP->args[0].addr,cVal1);
+                printf("JT\t%p\t(%c)\n",IP->args[0].addr,cVal1);
                 IP=cVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JT_A:
                 aVal1 = (char*)popa();
-                //printf("JT\t%p\t(%p)\n",IP->args[0].addr,aVal1);
+                printf("JT\t%p\t(%p)\n",IP->args[0].addr,aVal1);
                 IP=aVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JT_D:
                 dVal1 = popd();
-                //printf("JT\t%p\t(%lf)\n",IP->args[0].addr,dVal1);
+                printf("JT\t%p\t(%lf)\n",IP->args[0].addr,dVal1);
                 IP=dVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JF_I:
                 iVal1=popi();
-                //printf("JF\t%p\t(%ld)\n",IP->args[0].addr,iVal1);
+                printf("JF\t%p\t(%ld)\n",IP->args[0].addr,iVal1);
                 IP=!iVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JF_C:
                 cVal1=popc();
-                //printf("JF\t%p\t(%c)\n",IP->args[0].addr,cVal1);
+                printf("JF\t%p\t(%c)\n",IP->args[0].addr,cVal1);
                 IP=!cVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JF_A:
                 aVal1 = (char*)popa();
-                //printf("JF\t%p\t(%p)\n",IP->args[0].addr,aVal1);
+                printf("JF\t%p\t(%p)\n",IP->args[0].addr,aVal1);
                 IP=!aVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JF_D:
                 dVal1 = popd();
-                //printf("JF\t%p\t(%lf)\n",IP->args[0].addr,dVal1);
+                printf("JF\t%p\t(%lf)\n",IP->args[0].addr,dVal1);
                 IP=dVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JMP:
-                //printf("JMP\t%p\t(%lf)\n",IP->args[0].addr);
+                printf("JMP\t%p\t(%lf)\n",IP->args[0].addr);
                 IP=(Instr*)IP->args[0].addr;
                 break;
             case O_LESS_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("LESS_D\t(%g < %g -> %ld)\n",dVal2,dVal1,dVal2 < dVal1);
+                printf("LESS_D\t(%g < %g -> %ld)\n",dVal2,dVal1,dVal2 < dVal1);
                 pushi(dVal2 < dVal1);
                 IP=IP->next;
                 break;
             case O_LESS_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("LESS_C\t(%c < %c -> %ld)\n",cVal2,cVal1,cVal2 < cVal1);
+                printf("LESS_C\t(%c < %c -> %ld)\n",cVal2,cVal1,cVal2 < cVal1);
                 pushi(cVal2 < cVal1);
                 IP=IP->next;
                 break;
             case O_LESS_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("LESS_I\t(%d < %d -> %ld)\n",iVal2,iVal1,iVal2 < iVal1);
+                printf("LESS_I\t(%d < %d -> %ld)\n",iVal2,iVal1,iVal2 < iVal1);
                 pushi(iVal2 < iVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("LESSEQ_D\t(%g <= %g -> %ld)\n",dVal2,dVal1,dVal2 <= dVal1);
+                printf("LESSEQ_D\t(%g <= %g -> %ld)\n",dVal2,dVal1,dVal2 <= dVal1);
                 pushi(dVal2 <= dVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                //printf("LESSEQ_C\t(%c <= %c -> %ld)\n",cVal2,cVal1,cVal2 <= cVal1);
+                printf("LESSEQ_C\t(%c <= %c -> %ld)\n",cVal2,cVal1,cVal2 <= cVal1);
                 pushi(cVal2 <= cVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                //printf("LESSEQ_I\t(%d <= %d -> %ld)\n",iVal2,iVal1,iVal2 <= iVal1);
+                printf("LESSEQ_I\t(%d <= %d -> %ld)\n",iVal2,iVal1,iVal2 <= iVal1);
                 pushi(iVal2 <= iVal1);
                 IP=IP->next;
                 break;
             case O_LOAD:
                 iVal1=IP->args[0].i;
                 aVal1=(char*)popa();
-                //printf("LOAD\t%ld\t(%p)\n",iVal1,aVal1);
+                printf("LOAD\t%ld\t(%p)\n",iVal1,aVal1);
                 if(SP+iVal1>stackAfter)err("out of stack");
                 memcpy(SP,aVal1,iVal1);
                 SP+=iVal1;
@@ -1991,7 +2029,7 @@ void run(Instr *IP)
             case O_OFFSET:
                 iVal1=popi();
                 aVal1=(char*)popa();
-                //printf("OFFSET\t(%p+%ld -> %p)\n",aVal1,iVal1,aVal1+iVal1);
+                printf("OFFSET\t(%p+%ld -> %p)\n",aVal1,iVal1,aVal1+iVal1);
                 pusha(aVal1+iVal1);
                 IP=IP->next;
                 break;
@@ -2009,19 +2047,19 @@ void run(Instr *IP)
                 break;
             case O_PUSHCT_C:
                 cVal1=IP->args[0].i;
-                //printf("PUSHCT_c\t%c\n",cVal1);
+                printf("PUSHCT_c\t%c\n",cVal1);
                 pushc(cVal1);
                 IP=IP->next;
                 break;
             case O_PUSHCT_D:
                 dVal1=IP->args[0].d;
-                //printf("PUSHCT_D\t%lf\n",dVal1);
+                printf("PUSHCT_D\t%lf\n",dVal1);
                 pushd(dVal1);
                 IP=IP->next;
                 break;
             case O_PUSHCT_I:
                 iVal1=IP->args[0].i;
-                //printf("PUSHCT_I\t%d\n",iVal1);
+                printf("PUSHCT_I\t%d\n",iVal1);
                 pushi(iVal1);
                 IP=IP->next;
                 break;
@@ -2040,7 +2078,10 @@ void run(Instr *IP)
                 break;
             case O_STORE:
                 iVal1=IP->args[0].i;
-                if(SP-(sizeof(void*)+iVal1)<stk)err("not enough stack bytes for SET");
+
+                if(SP-(sizeof(void*)+iVal1)<stk)
+                    err("not enough stack bytes for SET");
+
                 aVal1=(char*)(*(void**)(SP-((sizeof(void*)+iVal1))));
                 printf("STORE\t%ld\t(%p)\n",iVal1,aVal1);
                 memcpy(aVal1,SP-iVal1,iVal1);
@@ -2050,7 +2091,7 @@ void run(Instr *IP)
             case O_SUB_D:
                 dVal1=popd();
                 dVal2=popd();
-                //printf("SUB_D\t(%g-%g -> %g)\n",dVal2,dVal1,dVal2-dVal1);
+                printf("SUB_D\t(%g-%g -> %g)\n",dVal2,dVal1,dVal2-dVal1);
                 pushd(dVal2-dVal1);
                 IP=IP->next;
                 break;
@@ -2096,13 +2137,116 @@ void mvTest()
     addInstr(O_HALT);
 }
 
+Instr *getRVal(RetVal *rv)
+{
+    if(rv->isLVal){
+        switch(rv->type.typeBase){
+                case TB_INT:
+                case TB_DOUBLE:
+                case TB_CHAR:
+                case TB_STRUCT:
+                        addInstrI(O_LOAD,typeArgSize(&rv->type));
+                        break;
+                default:tkerr(crtTk,"unhandled type: %s",TB[rv->type.typeBase]);
+            }
+    }
+    return lastInstruction;
+}
+
+void addCastInstr(Instr *after,Type *actualType,Type *neededType)
+{
+    if(actualType->nElements>=0||neededType->nElements>=0)return;
+    switch(actualType->typeBase){
+        case TB_CHAR:
+                switch(neededType->typeBase){
+                        case TB_CHAR:break;
+                        case TB_INT:addInstrAfter(after,O_CAST_C_I);break;
+                        case TB_DOUBLE:addInstrAfter(after,O_CAST_C_D);break;
+                        }
+                break;
+        case TB_INT:
+                switch(neededType->typeBase){
+                        case TB_CHAR:addInstrAfter(after,O_CAST_I_C);break;
+                        case TB_INT:break;
+                        case TB_DOUBLE:addInstrAfter(after,O_CAST_I_D);break;
+                        }
+                break;
+        case TB_DOUBLE:
+                switch(neededType->typeBase){
+                        case TB_CHAR:addInstrAfter(after,O_CAST_D_C);break;
+                        case TB_INT:addInstrAfter(after,O_CAST_D_I);break;
+                        case TB_DOUBLE:break;
+                        }
+                break;
+    }
+}
+
+Instr *createCondJmp(RetVal *rv)
+{
+    if(rv->type.nElements>=0){  // arrays
+        return addInstr(O_JF_A);
+    }
+    else{                              // non-arrays
+        getRVal(rv);
+        switch(rv->type.typeBase){
+            case TB_CHAR:return addInstr(O_JF_C);
+            case TB_DOUBLE:return addInstr(O_JF_D);
+            case TB_INT:return addInstr(O_JF_I);
+            default:return NULL;
+            }
+        }
+}
+
+
+/// Syntactic Analyzer Functions ///
+int unit();
+
+int ruleIf(RetVal& rv, Instr* &i1, Instr* &i2);
+int ruleWhile(RetVal& rv, Instr* &i1, Instr* &i2);
+int ruleFor();
+int ruleBreak();
+int ruleReturn(Instr* &i);
+
+int declStruct();
+int declVar();
+int typeBase(Type& type);
+int arrayDecl(Type& type);
+int typeName();
+
+int declFunc();
+int funcArg();
+
+int stm();
+int stmCompound();
+
+int expr(RetVal& rv);
+int exprAssign(RetVal& rv);
+int exprOr(RetVal& rv);
+int exprOr1(RetVal& rv);
+int exprAnd(RetVal& rv);
+int exprAnd1(RetVal& rv);
+int exprEq(RetVal& rv);
+int exprEq1(RetVal& rv);
+int exprRel(RetVal& rv);
+int exprRel1(RetVal& rv);
+int exprAdd(RetVal& rv);
+int exprAdd1(RetVal& rv);
+int exprMul(RetVal& rv);
+int exprMul1(RetVal& rv);
+int exprCast(RetVal& rv);
+int exprUnary(RetVal& rv);
+int exprPostfix(RetVal& rv);
+int exprPostfix1(RetVal& rv);
+int exprPrimary(RetVal& rv);
+/// END OF - Syntactic Analyzer Functions ///
+
 int main()
 {
     addExtFunctions();
-    mvTest();
-    run(instructions);
-    /**
-    FILE *f = fopen("0.c", "rb");
+    //mvTest();
+    //run(instructions);
+
+    FILE *f = fopen("7.c", "rb");
 
 
 
@@ -2113,7 +2257,7 @@ int main()
     char *text = (char*)malloc(size);
 
     fread(text,size, 1, f);
-    text[size] = 0;
+    text[size-1] = 0;
     pCrtCh = text;
 
     for(;;){
@@ -2126,10 +2270,16 @@ int main()
     printTokens(tokens);
 
     crtTk = tokens;
-    unit();
+    if(!unit()){
+        tkerr(crtTk, "Syntax not valid");
+    }
+
+    printInstr();
+
+    run(instructions);
 
     fclose(f);
-    **/
+
 
     return 0;
 }
@@ -2137,13 +2287,23 @@ int main()
 int unit(){
     print("unit\n");
 
+    Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
+    Instr *labelMain=addInstr(O_CALL);
+    addInstr(O_HALT);
+
     for(;;){
         if(declStruct() || declFunc() || declVar()) {}
         else break;
     }
 
-    if(!consume(END)) tkerr(crtTk, "missing END token in unit");
+    labelMain->args[0].addr=requireSymbol(symbols, "main")->addr;
 
+    if(!consume(END)){
+        crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
+        tkerr(crtTk, "missing END token in unit");
+    }
     success("unit\n");
     return 1;
 }
@@ -2153,10 +2313,13 @@ int declStruct(){
 
     Token *startTk = crtTk;
 
+
     if(consume(STRUCT)){
         Token *tkName = crtTk;
         if(consume(ID)){
             if(consume(LACC)){
+                offset = 0;
+
                 if(findSymbol(symbols,tkName->text))
                     tkerr(crtTk,"symbol redefinition: %s",tkName->text);
                 crtStruct=addSymbol(symbols,tkName->text,CLS_STRUCT);
@@ -2293,15 +2456,22 @@ int arrayDecl(Type& ret){
     print("arrayDecl\n");
 
     Token* startTk = crtTk;
+    Instr* startInstr = lastInstruction;
     RetVal rv;
 
+    Instr* instrBeforeExpr;
+
     if(consume(LBRACKET)){
+        instrBeforeExpr = lastInstruction;
+
         if(expr(rv)){
             if(!rv.isCtVal)tkerr(crtTk,"the array size is not a constant");
             if(rv.type.typeBase!=TB_INT)tkerr(crtTk,"the array size is not an integer");
             ret.nElements=rv.ctVal.i;
             ret.nElements = 0;
         }
+        deleteInstructionsAfter(instrBeforeExpr);
+
         if(consume(RBRACKET)){
             return 1;
         }
@@ -2314,8 +2484,10 @@ int arrayDecl(Type& ret){
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
+
     return 0;
 }
 
@@ -2344,7 +2516,10 @@ int declFunc(){
     print("declFunc\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
+
     Type t;
+    vector<Symbol*> :: iterator ps;
 
     if(typeBase(t)){
         if(consume(MUL)){
@@ -2359,12 +2534,14 @@ int declFunc(){
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
     Token* tkName = crtTk;
 
     if(consume(ID)){
+        sizeArgs = offset = 0;
         if(consume(LPAR)){
             if(findSymbol(symbols,tkName->text))
                 tkerr(crtTk,"declFunc symbol redefinition: %s",tkName->text);
@@ -2391,9 +2568,25 @@ int declFunc(){
             if(consume(RPAR)){
                 crtDepth--;
 
-                cout << "AAAAAA";
+                crtFunc->addr=addInstr(O_ENTER);
+                sizeArgs=offset;
+                //update args offsets for correct FP indexing
+                for(ps=symbols.begin();ps!=symbols.end();ps++){
+                    if((*ps)->mem==MEM_ARG){
+                            //2*sizeof(void*) == sizeof(retAddr)+sizeof(FP)
+                            (*ps)->offset-=sizeArgs+2*sizeof(void*);
+                            }
+                    }
+                offset=0;
+
                 if(stmCompound()){
                     deleteSymbolsAfter(symbols, crtFunc);
+
+                    ((Instr*)crtFunc->addr)->args[0].i=offset;  // setup the ENTER argument
+                    if(crtFunc->type.typeBase==TB_VOID){
+                        addInstrII(O_RET,sizeArgs,0);
+                    }
+
                     crtFunc = NULL;
                     return 1;
                 }
@@ -2407,6 +2600,7 @@ int declFunc(){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
@@ -2421,6 +2615,8 @@ int declFunc(){
 ///funcArg: typeBase ID arrayDecl? ;
 int funcArg(){
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
+
     Type t;
 
     if(typeBase(t)){
@@ -2436,21 +2632,27 @@ int funcArg(){
             Symbol  *s=addSymbol(symbols,tkName->text,CLS_VAR);
             s->mem=MEM_ARG;
             s->type=t;
+            s->offset=offset;
 
             s=addSymbol(crtFunc->args,tkName->text,CLS_VAR);
             s->mem=MEM_ARG;
             s->type=t;
+            s->offset=offset;
+
+            offset+=typeArgSize(&s->type);
 
             return 1;
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
 
     }
 
     crtTk = startTk;
+    deleteInstructionsAfter(startInstr);
     return 0;
 
 }
@@ -2460,17 +2662,18 @@ int stm(){
     print("stm\n");
     Token *startTk = crtTk;
     RetVal rv, rv1, rv2, rv3;
+    Instr *i,*i1,*i2,*i3,*i4,*is,*ib3,*ibs;
 
     if(stmCompound()){
         return 1;
     } else {crtTk = startTk;}
 
-    if(ruleIf(rv)){
+    if(ruleIf(rv, i1, i2)){
         print("RULE IF\n");
         return 1;
     } else {crtTk = startTk;}
 
-    if(ruleWhile(rv)){
+    if(ruleWhile(rv, i1, i2)){
         print("RULE WHILE\n");
         return 1;
     } else {crtTk = startTk;}
@@ -2485,13 +2688,15 @@ int stm(){
         return 1;
     } else {crtTk = startTk;}
 
-    if(ruleReturn()){
+    if(ruleReturn(i)){
         print("RULE RETURN\n");
         return 1;
     } else {crtTk = startTk;}
 
 
-    if(expr(rv1)){}
+    if(expr(rv1)){
+        if(typeArgSize(&rv1.type))addInstrI(O_DROP,typeArgSize(&rv1.type));
+    }
     if(consume(SEMICOLON)) return 1;
 
     crtTk = startTk;
@@ -2533,7 +2738,7 @@ int stmCompound(){
     return 0;
 }
 
-int ruleIf(RetVal& rv){
+int ruleIf(RetVal& rv, Instr*& i1, Instr*& i2){
     print("ruleIf\n");
 
     Token *startTk = crtTk;
@@ -2545,16 +2750,21 @@ int ruleIf(RetVal& rv){
                     tkerr(crtTk,"a structure cannot be logically tested");
 
                 if(consume(RPAR)){
+                    i1 = createCondJmp(&rv);
+
                     if(stm()){
                         if(consume(ELSE)){
-                            if(consume(stm())){
-                                return 1;
+                            i2 = addInstr(O_JMP);
+                            if(stm()){
+                                i1 -> args[0].addr = i2 -> next;
+                                i1 = i2;
+                                //return 1;
                             }
                             else{
                                 tkerr(crtTk, "Invalid ELSE statement");
                             }
                         }
-
+                        i1->args[0].addr=addInstr(O_NOP);
                         return 1;
                     }
                     else{
@@ -2574,24 +2784,39 @@ int ruleIf(RetVal& rv){
         }
 
     }
+    else{
+        crtTk = startTk;
+        return 0;
+    }
 
-    crtTk = startTk;
-    return 0;
+    return 1;
 }
 
-int ruleWhile(RetVal& rv){
+int ruleWhile(RetVal& rv,  Instr*& i1, Instr*& i2){
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     print("ruleWhile\n");
 
     if(consume(WHILE)){
+
+        Instr *oldLoopEnd=crtLoopEnd;
+        crtLoopEnd=createInstr(O_NOP);
+        i1=lastInstruction;
+
         if(consume(LPAR)){
             if(expr(rv)){
                 if(rv.type.typeBase==TB_STRUCT)
                     tkerr(crtTk,"a structure cannot be logically tested");
 
                 if(consume(RPAR)){
+                    i2=createCondJmp(&rv);
                     if(stm()){
+                        addInstrA(O_JMP,i1->next);
+                        appendInstr(crtLoopEnd);
+                        i2->args[0].addr=crtLoopEnd;
+                        crtLoopEnd=oldLoopEnd;
+
                         return 1;
                     }
                     else{
@@ -2612,6 +2837,7 @@ int ruleWhile(RetVal& rv){
     }
 
     crtTk=startTk;
+    deleteInstructionsAfter(startInstr);
     return 0;
 }
 
@@ -2681,21 +2907,31 @@ int ruleBreak(){
     return 0;
 }
 
-int ruleReturn(){
+int ruleReturn(Instr* &i){
     print("ruleReturn\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
     RetVal rv;
 
 
     if(consume(RETURN)){
         if(expr(rv)){
+            i=getRVal(&rv);
+            addCastInstr(i,&rv.type,&crtFunc->type);
+
             if(crtFunc->type.typeBase==TB_VOID)
                 tkerr(crtTk,"a void function cannot return a value");
             cast(&crtFunc->type,&rv.type);
         }
 
         if(consume(SEMICOLON)){
+            if(crtFunc->type.typeBase==TB_VOID){
+                addInstrII(O_RET,sizeArgs,0);
+            }else{
+                addInstrII(O_RET,sizeArgs,typeArgSize(&crtFunc->type));
+            }
+
             return 1;
         }
         else{
@@ -2704,6 +2940,7 @@ int ruleReturn(){
     }
 
     crtTk = startTk;
+    deleteInstructionsAfter(startInstr);
     return 0;
 }
 
@@ -2724,8 +2961,11 @@ int expr(RetVal& rv){
 /// exprAssign: exprUnary ASSIGN exprAssign | exprOr
 int exprAssign(RetVal& rv){
     print("exprAssign\n");
+
     Token *startTk = crtTk;
     RetVal rve;
+    Instr* startInstr = lastInstruction;
+    Instr *i,*oldLastInstr=lastInstruction;
 
     if(exprUnary(rv)){
         if(consume(ASSIGN)){
@@ -2733,26 +2973,37 @@ int exprAssign(RetVal& rv){
                 if(!rv.isLVal) tkerr(crtTk,"cannot assign to a non-lval");
                 if(rv.type.nElements>-1||rve.type.nElements>-1)
                     tkerr(crtTk,"the arrays cannot be assigned");
+
                 cast(&rv.type,&rve.type);
+                i=getRVal(&rve);
+                addCastInstr(i,&rve.type,&rv.type);
+                //duplicate the value on top before the dst addr
+                addInstrII(O_INSERT, sizeof(void*)+typeArgSize(&rv.type), typeArgSize(&rv.type));
+                addInstrI(O_STORE,typeArgSize(&rv.type));
                 rv.isCtVal=rv.isLVal=0;
+
                 return 1;
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(oldLastInstr);
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(oldLastInstr);
         }
     }
 
     crtTk = startTk;
+    deleteInstructionsAfter(oldLastInstr);
     if(exprOr(rv)){
         success("exprAssign\n");
         return 1;
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(oldLastInstr);
         return 0;
     }
     return 0;
@@ -2765,6 +3016,7 @@ int exprAssign(RetVal& rv){
 int exprOr(RetVal& rv){
     print("exprOr\n");
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprAnd(rv)){
         if(exprOr1(rv)){
@@ -2772,11 +3024,13 @@ int exprOr(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
@@ -2785,13 +3039,35 @@ int exprOr(RetVal& rv){
 }
 int exprOr1(RetVal& rv){
     print("exprOr1\n");
+
     Token *startTk = crtTk;
     RetVal rve;
+    Instr *i1,*i2;Type t,t1,t2;
+    Instr* startInstr = lastInstruction;
 
     if(consume(OR)){
+
+        i1=rv.type.nElements<0?getRVal(&rv):lastInstruction;
+        t1=rv.type;
+
         if(exprAnd(rve)){
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                     tkerr(crtTk,"a structure cannot be logically tested");
+
+            if(rv.type.nElements>=0){      // vectors
+                addInstr(O_OR_A);
+            }else{  // non-vectors
+                i2=getRVal(&rve);t2=rve.type;
+                t=getArithType(&t1,&t2);
+                addCastInstr(i1,&t1,&t);
+                addCastInstr(i2,&t2,&t);
+                switch(t.typeBase){
+                    case TB_INT:addInstr(O_OR_I);break;
+                    case TB_DOUBLE:addInstr(O_OR_D);break;
+                    case TB_CHAR:addInstr(O_OR_C);break;
+                }
+            }
+
             rv.type=createType(TB_INT,-1);
             rv.isCtVal=rv.isLVal=0;
 
@@ -2800,16 +3076,19 @@ int exprOr1(RetVal& rv){
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 1;
     }
 
@@ -2823,7 +3102,9 @@ int exprOr1(RetVal& rv){
 /// exprAnd: exprEq exprAnd1; exprAnd1: (AND exprEq exprAnd1)?
 int exprAnd(RetVal& rv){
     print("exprAnd\n");
+
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprEq(rv)){
         if(exprAnd1(rv)){
@@ -2831,11 +3112,13 @@ int exprAnd(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
@@ -2844,14 +3127,35 @@ int exprAnd(RetVal& rv){
 }
 int exprAnd1(RetVal& rv){
     print("exprAnd1\n");
-
+    Instr *i1,*i2;Type t,t1,t2;
     Token *startTk = crtTk;
     RetVal rve;
+    Instr* startInstr = lastInstruction;
 
     if(consume(AND)){
+
+        i1=rv.type.nElements<0?getRVal(&rv):lastInstruction;
+        t1=rv.type;
+
         if(exprEq(rve)){
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                 tkerr(crtTk,"a structure cannot be logically tested");
+
+            if(rv.type.nElements>=0){      // vectors
+                addInstr(O_AND_A);
+             }
+             else{  // non-vectors
+                i2=getRVal(&rve);t2=rve.type;
+                t=getArithType(&t1,&t2);
+                addCastInstr(i1,&t1,&t);
+                addCastInstr(i2,&t2,&t);
+                switch(t.typeBase){
+                        case TB_INT:addInstr(O_AND_I);break;
+                        case TB_DOUBLE:addInstr(O_AND_D);break;
+                        case TB_CHAR:addInstr(O_AND_C);break;
+                        }
+            }
+
             rv.type=createType(TB_INT,-1);
             rv.isCtVal=rv.isLVal=0;
 
@@ -2860,11 +3164,13 @@ int exprAnd1(RetVal& rv){
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
         success("exprAnd1\n");
@@ -2872,6 +3178,7 @@ int exprAnd1(RetVal& rv){
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 1;
     }
     success("exprAnd1\n");
@@ -2886,6 +3193,7 @@ int exprEq(RetVal& rv){
     print("exprEq\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprRel(rv)){
         if(exprEq1(rv)){
@@ -2893,11 +3201,13 @@ int exprEq(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
@@ -2906,32 +3216,65 @@ int exprEq(RetVal& rv){
 int exprEq1(RetVal& rv){
     print("exprEq1\n");
 
+    Instr *i1,*i2;Type t,t1,t2;
     Token *startTk = crtTk;
     RetVal rve;
     Token* tkop = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(consume(EQUAL) || consume(NOTEQ)){
+
+        i1=rv.type.nElements<0?getRVal(&rv):lastInstruction;
+        t1=rv.type;
+
         if(exprRel(rve)){
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                     tkerr(crtTk,"a structure cannot be compared");
 
+            if(rv.type.nElements>=0){      // vectors
+                addInstr(tkop->code==EQUAL?O_EQ_A:O_NOTEQ_A);
+            }
+            else{  // non-vectors
+                i2=getRVal(&rve);t2=rve.type;
+                t=getArithType(&t1,&t2);
+                addCastInstr(i1,&t1,&t);
+                addCastInstr(i2,&t2,&t);
+                if(tkop->code==EQUAL){
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_EQ_I);break;
+                                case TB_DOUBLE:addInstr(O_EQ_D);break;
+                                case TB_CHAR:addInstr(O_EQ_C);break;
+                                }
+                        }else{
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_NOTEQ_I);break;
+                                case TB_DOUBLE:addInstr(O_NOTEQ_D);break;
+                                case TB_CHAR:addInstr(O_NOTEQ_C);break;
+                                }
+                        }
+            }
+
             rv.type=createType(TB_INT,-1);
             rv.isCtVal=rv.isLVal=0;
+
             if(exprEq1(rv)){
                 return 1;
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 1;
     }
 
@@ -2947,6 +3290,7 @@ int exprRel(RetVal& rv){
     print("exprRel\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprAdd(rv)){
         if(exprRel1(rv)){
@@ -2954,11 +3298,13 @@ int exprRel(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
@@ -2967,16 +3313,58 @@ int exprRel(RetVal& rv){
 int exprRel1(RetVal& rv){
     print("exprRel1\n");
 
+    Instr *i1,*i2;Type t,t1,t2;
+    Instr* startInstr = lastInstruction;
     Token *startTk = crtTk;
     RetVal rve;
     Token* tkop = crtTk;
 
     if(consume(LESS) || consume(LESSEQ) || consume(GREATER) || consume(GREATEREQ)){
+
+        i1=getRVal(&rv);t1=rv.type;
+
         if(exprAdd(rve)){
             if(rv.type.nElements>-1||rve.type.nElements>-1)
                 tkerr(crtTk,"an array cannot be compared");
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                 tkerr(crtTk,"a structure cannot be compared");
+
+            i2=getRVal(&rve);t2=rve.type;
+            t=getArithType(&t1,&t2);
+            addCastInstr(i1,&t1,&t);
+            addCastInstr(i2,&t2,&t);
+
+
+            switch(tkop->code){
+                case LESS:
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_LESS_I);break;
+                                case TB_DOUBLE:addInstr(O_LESS_D);break;
+                                case TB_CHAR:addInstr(O_LESS_C);break;
+                                }
+                        break;
+                case LESSEQ:
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_LESSEQ_I);break;
+                                case TB_DOUBLE:addInstr(O_LESSEQ_D);break;
+                                case TB_CHAR:addInstr(O_LESSEQ_C);break;
+                                }
+                        break;
+                case GREATER:
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_GREATER_I);break;
+                                case TB_DOUBLE:addInstr(O_GREATER_D);break;
+                                case TB_CHAR:addInstr(O_GREATER_C);break;
+                                }
+                        break;
+                case GREATEREQ:
+                        switch(t.typeBase){
+                                case TB_INT:addInstr(O_GREATEREQ_I);break;
+                                case TB_DOUBLE:addInstr(O_GREATEREQ_D);break;
+                                case TB_CHAR:addInstr(O_GREATEREQ_C);break;
+                                }
+                        break;
+            }
 
             rv.type=createType(TB_INT,-1);
             rv.isCtVal=rv.isLVal=0;
@@ -2986,17 +3374,21 @@ int exprRel1(RetVal& rv){
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
 
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
+        return 1;
     }
 
     success("exprRel1\n");
@@ -3011,6 +3403,7 @@ int exprAdd(RetVal& rv){
     print("exprAdd\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprMul(rv)){
         if(exprAdd1(rv)){
@@ -3018,11 +3411,13 @@ int exprAdd(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 }
@@ -3030,16 +3425,40 @@ int exprAdd1(RetVal& rv){
     print("exprAdd1\n");
 
     Token *startTk = crtTk;
+    Instr *i1,*i2;Type t,t1,t2;
+    Instr* startInstr = lastInstruction;
     Token* tkop = crtTk;
     RetVal rve;
 
     if(consume(ADD) || consume(SUB)){
+
+        i1=getRVal(&rv);t1=rv.type;
+
         if(exprMul(rve)){
             if(rv.type.nElements>-1||rve.type.nElements>-1)
                 tkerr(crtTk,"an array cannot be added or subtracted");
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                 tkerr(crtTk,"a structure cannot be added or subtracted");
+
             rv.type=getArithType(&rv.type,&rve.type);
+            i2=getRVal(&rve);t2=rve.type;
+            addCastInstr(i1,&t1,&rv.type);
+            addCastInstr(i2,&t2,&rv.type);
+            if(tkop->code==ADD){
+                switch(rv.type.typeBase){
+                    case TB_INT:addInstr(O_ADD_I);break;
+                    case TB_DOUBLE:addInstr(O_ADD_D);break;
+                    case TB_CHAR:addInstr(O_ADD_C);break;
+                }
+            }
+            else{
+                switch(rv.type.typeBase){
+                    case TB_INT:addInstr(O_SUB_I);break;
+                    case TB_DOUBLE:addInstr(O_SUB_D);break;
+                    case TB_CHAR:addInstr(O_SUB_C);break;
+                }
+            }
+
             rv.isCtVal=rv.isLVal=0;
 
             if(exprAdd1(rv)){
@@ -3047,17 +3466,21 @@ int exprAdd1(RetVal& rv){
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
 
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
+        return 1;
     }
 
     success("exprAdd1\n");
@@ -3072,6 +3495,7 @@ int exprMul(RetVal& rv){
     print("exprMul\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprCast(rv)){
         if(exprMul1(rv)){
@@ -3079,11 +3503,13 @@ int exprMul(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 }
@@ -3091,16 +3517,41 @@ int exprMul1(RetVal& rv){
     print("exprMul1\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
+    Instr *i1,*i2;Type t1,t2;
     RetVal rve;
     Token* tkop = crtTk;
 
     if(consume(MUL) || consume(DIV)){
+
+        i1=getRVal(&rv);t1=rv.type;
+
         if(exprCast(rve)){
             if(rv.type.nElements>-1||rve.type.nElements>-1)
                 tkerr(crtTk,"an array cannot be multiplied or divided");
             if(rv.type.typeBase==TB_STRUCT||rve.type.typeBase==TB_STRUCT)
                 tkerr(crtTk,"a structure cannot be multiplied or divided");
             rv.type=getArithType(&rv.type,&rve.type);
+
+            i2=getRVal(&rve);t2=rve.type;
+            addCastInstr(i1,&t1,&rv.type);
+            addCastInstr(i2,&t2,&rv.type);
+
+            if(tkop->code==MUL){
+                switch(rv.type.typeBase){
+                    case TB_INT:addInstr(O_MUL_I);break;
+                    case TB_DOUBLE:addInstr(O_MUL_D);break;
+                    case TB_CHAR:addInstr(O_MUL_C);break;
+                }
+            }
+            else{
+                switch(rv.type.typeBase){
+                    case TB_INT:addInstr(O_DIV_I);break;
+                    case TB_DOUBLE:addInstr(O_DIV_D);break;
+                    case TB_CHAR:addInstr(O_DIV_C);break;
+                }
+            }
+
             rv.isCtVal=rv.isLVal=0;
 
             if(exprMul1(rv)){
@@ -3108,15 +3559,20 @@ int exprMul1(RetVal& rv){
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
-
-        success("exprMul1\n");
-        return 1;
+        else{
+                crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
+                return 1;
+        }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
+        return 1;
     }
 
     return 1;
@@ -3131,38 +3587,70 @@ int exprCast(RetVal& rv){
     Token *startTk = crtTk;
     Type t;
     RetVal rve;
+    Instr* startInstr = lastInstruction;
+    Instr *oldLastInstr=lastInstruction;
 
     if(consume(LPAR)){
         if(typeName(t)){
             if(consume(RPAR)){
                 if(exprCast(rve)){
                     cast(&t,&rve.type);
+
+                    if(rv.type.nElements<0&&rv.type.typeBase!=TB_STRUCT){
+                        switch(rve.type.typeBase){
+                            case TB_CHAR:
+                                    switch(t.typeBase){
+                                            case TB_INT:addInstr(O_CAST_C_I);break;
+                                            case TB_DOUBLE:addInstr(O_CAST_C_D);break;
+                                            }
+                                    break;
+                            case TB_DOUBLE:
+                                    switch(t.typeBase){
+                                            case TB_CHAR:addInstr(O_CAST_D_C);break;
+                                            case TB_INT:addInstr(O_CAST_D_I);break;
+                                            }
+                                    break;
+                            case TB_INT:
+                                    switch(t.typeBase){
+                                            case TB_CHAR:addInstr(O_CAST_I_C);break;
+                                            case TB_DOUBLE:addInstr(O_CAST_I_D);break;
+                                            }
+                                    break;
+                            }
+                    }
+
+
                     rv.type=t;
                     rv.isCtVal=rv.isLVal=0;
                     return 1;
                 }
                 else{
                     crtTk = startTk;
+                    deleteInstructionsAfter(startInstr);
                     return 0;
                 }
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 0;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(oldLastInstr);
         if(exprUnary(rv)){
             return 1;
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
@@ -3178,15 +3666,36 @@ int exprUnary(RetVal& rv){
 
     Token *startTk = crtTk;
     Token* tkop = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(consume(SUB) || consume(NOT)){
         if(exprUnary(rv)){
             if(tkop->code==SUB){
                 if(rv.type.nElements>=0) tkerr(crtTk,"unary '-' cannot be applied to an array");
                 if(rv.type.typeBase==TB_STRUCT) tkerr(crtTk,"unary '-' cannot be applied to a struct");
+
+                getRVal(&rv);
+                switch(rv.type.typeBase){
+                    case TB_CHAR:addInstr(O_NEG_C);break;
+                    case TB_INT:addInstr(O_NEG_I);break;
+                    case TB_DOUBLE:addInstr(O_NEG_D);break;
+                }
+
             }
             else{  // NOT
                 if(rv.type.typeBase==TB_STRUCT) tkerr(crtTk,"'!' cannot be applied to a struct");
+
+                if(rv.type.nElements<0){
+                    getRVal(&rv);
+                    switch(rv.type.typeBase){
+                            case TB_CHAR:addInstr(O_NOT_C);break;
+                            case TB_INT:addInstr(O_NOT_I);break;
+                            case TB_DOUBLE:addInstr(O_NOT_D);break;
+                    }
+                }
+                else
+                    addInstr(O_NOT_A);
+
                 rv.type=createType(TB_INT,-1);
             }
             rv.isCtVal=rv.isLVal=0;
@@ -3196,6 +3705,7 @@ int exprUnary(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
@@ -3204,6 +3714,7 @@ int exprUnary(RetVal& rv){
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
@@ -3219,6 +3730,7 @@ int exprPostfix(RetVal& rv){
     print("exprPostfix\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
 
     if(exprPrimary(rv)){
         if(exprPostfix1(rv)){
@@ -3226,11 +3738,13 @@ int exprPostfix(RetVal& rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 }
@@ -3238,6 +3752,7 @@ int exprPostfix1(RetVal& rv){
     print("exprPostfix1\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
     RetVal rve;
 
     if(consume(LBRACKET)){
@@ -3251,22 +3766,33 @@ int exprPostfix1(RetVal& rv){
             rv.isCtVal=0;
 
             if(consume(RBRACKET)){
+                addCastInstr(lastInstruction,&rve.type,&typeInt);
+                getRVal(&rve);
+                if(typeBaseSize(&rv.type)!=1){
+                        addInstrI(O_PUSHCT_I,typeBaseSize(&rv.type));
+                        addInstr(O_MUL_I);
+                        }
+                addInstr(O_OFFSET);
+
                 if(exprPostfix1(rv)){
                     return 1;
                 }
                 else{
                     crtTk = startTk;
+                    deleteInstructionsAfter(startInstr);
                     return 1;
                 }
 
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
         success("exprPostfix\n");
@@ -3277,28 +3803,38 @@ int exprPostfix1(RetVal& rv){
         if(consume(ID)){
             Symbol      *sStruct=rv.type.s;
             Symbol      *sMember=findSymbol(sStruct->members,tkName->text);
+
             if(!sMember)
                 tkerr(crtTk,"struct %s does not have a member %s",sStruct->name,tkName->text);
+
             rv.type=sMember->type;
             rv.isLVal=1;
             rv.isCtVal=0;
+
+            if(sMember->offset){
+                addInstrI(O_PUSHCT_I,sMember->offset);
+                addInstr(O_OFFSET);
+            }
 
             if(exprPostfix1(rv)){
                 return 1;
             }
             else{
                 crtTk = startTk;
+                deleteInstructionsAfter(startInstr);
                 return 1;
             }
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 1;
         }
     }
     else{
         crtTk = startTk;
-
+        deleteInstructionsAfter(startInstr);
+        return 1;
     }
 
     success("exprPostfix1\n");
@@ -3318,6 +3854,8 @@ int exprPrimary(RetVal &rv){
     print("exprPrimary\n");
 
     Token *startTk = crtTk;
+    Instr* startInstr = lastInstruction;
+    Instr *i;
     Token* tkName = crtTk;
     RetVal arg;
 
@@ -3339,6 +3877,15 @@ int exprPrimary(RetVal &rv){
 
                 if(crtDefArg==s->args.end())tkerr(crtTk,"too many arguments in call");
                 cast(&((*crtDefArg)->type),&arg.type);
+
+                if((*crtDefArg)->type.nElements<0){  //only arrays are passed by addr
+                    i=getRVal(&arg);
+                }
+                else{
+                    i=lastInstruction;
+                }
+                addCastInstr(i,&arg.type,&(*crtDefArg)->type);
+
                 crtDefArg++;
 
                 for(;;){
@@ -3347,6 +3894,15 @@ int exprPrimary(RetVal &rv){
 
                             if(crtDefArg==s->args.end())tkerr(crtTk,"too many arguments in call");
                             cast(&((*crtDefArg)->type),&arg.type);
+
+                            if((*crtDefArg)->type.nElements<0){
+                                i=getRVal(&arg);
+                            }
+                            else{
+                                i=lastInstruction;
+                            }
+                            addCastInstr(i,&arg.type,&(*crtDefArg)->type);
+
                             crtDefArg++;
 
                         }
@@ -3357,6 +3913,10 @@ int exprPrimary(RetVal &rv){
             }
 
             if(consume(RPAR)){
+
+                i=addInstr(s->cls==CLS_FUNC?O_CALL:O_CALLEXT);
+                i->args[0].addr=s->addr;
+
                 if(crtDefArg!=s->args.end())tkerr(crtTk,"too few arguments in call");
                 rv.type=s->type;
                 rv.isCtVal=rv.isLVal=0;
@@ -3368,20 +3928,40 @@ int exprPrimary(RetVal &rv){
                 if(s->cls==CLS_FUNC||s->cls==CLS_EXTFUNC) tkerr(crtTk,"missing call for function %s",tkName->text);
             }
         }
+        else{
+            if(s->depth){
+                addInstrI(O_PUSHFPADDR,s->offset);
+            }
+            else{
+                addInstrA(O_PUSHCT_A,s->addr);
+            }
+        }
         return 1;
     }
 
+
+    Token* tki = crtTk;
     if(consume(CT_INT)){
-        Token* tki = crtTk;
+        //Token* tki = crtTk;
+
+        addInstrI(O_PUSHCT_I,tki->i);
+
         rv.type=createType(TB_INT,-1);
         rv.ctVal.i=tki->i;
+
+        printf("AAAAAAAAAAAAAAA %ld\n\n", crtTk->i);
+
         rv.isCtVal=1;
         rv.isLVal=0;
 
         return 1;
     }
+
+    Token* tkr = crtTk;
     if(consume(CT_REAL)){
-        Token* tkr = crtTk;
+        i=addInstr(O_PUSHCT_D);
+        i->args[0].d=tkr->r;
+
         rv.type=createType(TB_DOUBLE,-1);
         rv.ctVal.d=tkr->r;
         rv.isCtVal=1;
@@ -3389,8 +3969,11 @@ int exprPrimary(RetVal &rv){
 
         return 1;
     }
+
+    Token* tkc = crtTk;
     if(consume(CT_CHAR)){
-        Token* tkc = crtTk;
+        addInstrI(O_PUSHCT_C,tkc->i);
+
         rv.type=createType(TB_CHAR,-1);
         rv.ctVal.i=tkc->i;
         rv.isCtVal=1;
@@ -3398,8 +3981,11 @@ int exprPrimary(RetVal &rv){
 
         return 1;
     }
+
+    Token* tks = crtTk;
     if(consume(CT_STRING)){
-        Token* tks = crtTk;
+        addInstrA(O_PUSHCT_A,tks->text);
+
         rv.type=createType(TB_CHAR,0);
         rv.ctVal.str=tks->text;
         rv.isCtVal=1;
@@ -3419,11 +4005,13 @@ int exprPrimary(RetVal &rv){
         }
         else{
             crtTk = startTk;
+            deleteInstructionsAfter(startInstr);
             return 0;
         }
     }
     else{
         crtTk = startTk;
+        deleteInstructionsAfter(startInstr);
         return 0;
     }
 
