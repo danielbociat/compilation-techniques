@@ -1558,16 +1558,14 @@ void run(Instr *IP)
     while(1){
         //printf("%p/%d\t",IP,SP-stk);
         switch(IP->opcode){
-            case O_NOP:
-                IP = IP -> next;
-                break;
-            case O_ADD_C:
+            case O_ADD_C:{
                 cVal1 = popc();
                 cVal2 = popc();
                 pushc(cVal1 + cVal2);
                 printf("ADD_C %d %d\n", cVal1, cVal2);
                 IP = IP -> next;
                 break;
+            }
             case O_ADD_D:{
                 double val1 = popd();
                 double val2 = popd();
@@ -1584,6 +1582,180 @@ void run(Instr *IP)
                 IP = IP -> next;
                 break;
             }
+
+            case O_AND_A:{
+                void* val1 = popa();
+                void* val2 = popa();
+                pushi(val1 && val2);
+                printf("AND_A %p %p\n", val1, val2);
+                IP = IP -> next;
+                break;
+            }
+            case O_AND_C:{
+                char val1 = popc();
+                char val2 = popc();
+                pushi(val1 && val2);
+                printf("AND_C %d %d\n", (int)val1, (int)val2);
+                IP = IP -> next;
+                break;
+            }
+            case O_AND_D:{
+                double val1 = popd();
+                double val2 = popd();
+                pushi(val1 && val2);
+                printf("AND_D %lf %lf\n", val1, val2);
+                IP = IP -> next;
+                break;
+            }
+            case O_AND_I:{
+                int val1 = popi();
+                int val2 = popi();
+                pushi(val1 && val2);
+                printf("AND_I %d %d\n", (int)val1, (int)val2);
+                IP = IP -> next;
+                break;
+            }
+
+            case O_CALL:{
+                aVal1=(char*)IP->args[0].addr;
+                printf("CALL\t%p\n",aVal1);
+                pusha(IP->next);
+                IP=(Instr*)aVal1;
+                break;
+            }
+            case O_CALLEXT:{
+                printf("CALLEXT\t%p\n",IP->args[0].addr);
+                (*(void(*)())IP->args[0].addr)();
+                IP=IP->next;
+                break;
+            }
+
+            case O_CAST_C_D:{
+                cVal1=popc();
+                dVal1=(double)cVal1;
+                printf("CAST_C_D\t(%c -> %lf)\n",cVal1,dVal1);
+                pushd(dVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_CAST_C_I:{
+                cVal1=popc();
+                iVal1=(int)cVal1;
+                printf("CAST_C_I\t(%c -> %ld)\n",cVal1,iVal1);
+                pushi(iVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_CAST_D_I:{
+                dVal1=popd();
+                iVal1=(int)dVal1;
+                printf("CAST_D_I\t(%lf -> %ld)\n",dVal1,iVal1);
+                pushi(iVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_CAST_D_C:{
+                dVal1=popd();
+                cVal1=(char)dVal1;
+                printf("CAST_D_C\t(%lf -> %c)\n",dVal1,cVal1);
+                pushc(cVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_CAST_I_D:{
+                iVal1=popi();
+                dVal1=(double)iVal1;
+                printf("CAST_I_D\t(%ld -> %g)\n",iVal1,dVal1);
+                pushd(dVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_CAST_I_C:{
+                iVal1=popi();
+                cVal1=(char)iVal1;
+                printf("CAST_I_C\t(%ld -> %c)\n",iVal1,cVal1);
+                pushc(cVal1);
+                IP=IP->next;
+                break;
+            }
+
+            case O_DIV_C:{
+                char a = popc();
+                char b = popc();
+                printf("DIV_C %c %c\n", a, b);
+                pushc(b / a);
+                break;
+            }
+            case O_DIV_D:{
+                double a = popd();
+                double b = popd();
+                printf("DIV_D %lf %lf\n", a, b);
+                pushd(b / a);
+                break;
+            }
+            case O_DIV_I:{
+                int a = popi();
+                int b = popi();
+                printf("DIV_I %d %d\n", a, b);
+                pushi(b / a);
+                break;
+            }
+
+            case O_DROP:{
+                iVal1=IP->args[0].i;
+                printf("DROP\t%ld\n",iVal1);
+                if(SP-iVal1<stk)err("not enough stack bytes");
+                SP-=iVal1;
+                IP=IP->next;
+                break;
+            }
+            case O_ENTER:{
+                iVal1=IP->args[0].i;
+                printf("ENTER\t%ld\n",iVal1);
+                pusha(FP);
+                FP=SP;
+                SP+=iVal1;
+                IP=IP->next;
+                break;
+            }
+
+            case O_EQ_D:{
+                dVal1=popd();
+                dVal2=popd();
+                printf("EQ_D\t(%g==%g -> %d)\n",dVal2,dVal1,dVal2==dVal1);
+                pushi(dVal2==dVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_EQ_C:{
+                cVal1=popc();
+                cVal2=popc();
+                printf("EQ_C\t(%c==%c -> %d)\n",cVal2,cVal1,cVal2==cVal1);
+                pushi(cVal2==cVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_EQ_I:{
+                iVal1=popi();
+                iVal2=popi();
+                printf("EQ_I\t(%ld==%ld -> %d)\n",iVal2,iVal1,iVal2==iVal1);
+                pushi(iVal2==iVal1);
+                IP=IP->next;
+                break;
+            }
+            case O_EQ_A:{
+                aVal1=(char*)popa();
+                aVal2=(char*)popa();
+                printf("EQ_A\t(%p==%p -> %d)\n",aVal2,aVal1,aVal2==aVal1);
+                pushi(aVal2==aVal1);
+                IP=IP->next;
+                break;
+            }
+
+            case O_NOP:
+                IP = IP -> next;
+                break;
+
             case O_MUL_I:{
                 int val1 = popi();
                 int val2 = popi();
@@ -1664,38 +1836,7 @@ void run(Instr *IP)
                 IP = IP -> next;
                 break;
             }
-            case O_AND_C:{
-                char val1 = popc();
-                char val2 = popc();
-                pushi(val1 && val2);
-                printf("AND_C %d %d\n", (int)val1, (int)val2);
-                IP = IP -> next;
-                break;
-            }
-            case O_AND_I:{
-                int val1 = popi();
-                int val2 = popi();
-                pushi(val1 && val2);
-                printf("AND_I %d %d\n", (int)val1, (int)val2);
-                IP = IP -> next;
-                break;
-            }
-            case O_AND_A:{
-                void* val1 = popa();
-                void* val2 = popa();
-                pushi(val1 && val2);
-                printf("AND_A %p %p\n", val1, val2);
-                IP = IP -> next;
-                break;
-            }
-            case O_AND_D:{
-                double val1 = popd();
-                double val2 = popd();
-                pushi(val1 && val2);
-                printf("AND_D %lf %lf\n", val1, val2);
-                IP = IP -> next;
-                break;
-            }
+
 
             case O_OR_C:{
                 char val1 = popc();
@@ -1729,149 +1870,32 @@ void run(Instr *IP)
                 IP = IP -> next;
                 break;
             }
-            case O_CALL:{
-                aVal1=(char*)IP->args[0].addr;
-                printf("CALL\t%p\n",aVal1);
-                pusha(IP->next);
-                IP=(Instr*)aVal1;
-                break;
-            }
-            case O_CALLEXT:
-                printf("CALLEXT\t%p\n",IP->args[0].addr);
-                (*(void(*)())IP->args[0].addr)();
-                IP=IP->next;
-                break;
-            case O_CAST_I_D:
-                iVal1=popi();
-                dVal1=(double)iVal1;
-                printf("CAST_I_D\t(%ld -> %g)\n",iVal1,dVal1);
-                pushd(dVal1);
-                IP=IP->next;
-                break;
-            case O_CAST_I_C:
-                iVal1=popi();
-                cVal1=(char)iVal1;
-                printf("CAST_I_C\t(%d -> %c)\n",iVal1,dVal1);
-                pushc(cVal1);
-                IP=IP->next;
-                break;
-            case O_CAST_D_I:
-                dVal1=popd();
-                iVal1=(int)dVal1;
-                printf("CAST_D_I\t(%lf -> %d)\n",dVal1,iVal1);
-                pushi(iVal1);
-                IP=IP->next;
-                break;
-            case O_CAST_D_C:
-                dVal1=popd();
-                cVal1=(char)dVal1;
-                printf("CAST_D_C\t(%lf -> %c)\n",dVal1,cVal1);
-                pushc(cVal1);
-                IP=IP->next;
-                break;
-            case O_CAST_C_D:
-                cVal1=popc();
-                dVal1=(double)cVal1;
-                printf("CAST_C_D\t(%c -> %lf)\n",cVal1,dVal1);
-                pushd(dVal1);
-                IP=IP->next;
-                break;
-            case O_CAST_C_I:
-                cVal1=popc();
-                iVal1=(int)cVal1;
-                printf("CAST_C_I\t(%c -> %d)\n",cVal1,iVal1);
-                pushi(iVal1);
-                IP=IP->next;
-                break;
-            case O_DIV_C:{
-                char a = popc();
-                char b = popc();
-                printf("DIV_C %c %c\n", a, b);
-                pushc(b / a);
-                break;
-            }
-            case O_DIV_I:{
-                int a = popi();
-                int b = popi();
-                printf("DIV_I %d %d\n", a, b);
-                pushi(b / a);
-                break;
-            }
-            case O_DIV_D:{
-                double a = popd();
-                double b = popd();
-                printf("DIV_D %lf %lf\n", a, b);
-                pushd(b / a);
-                break;
-            }
-            case O_DROP:
-                iVal1=IP->args[0].i;
-                printf("DROP\t%ld\n",iVal1);
-                if(SP-iVal1<stk)err("not enough stack bytes");
-                SP-=iVal1;
-                IP=IP->next;
-                break;
-            case O_ENTER:
-                iVal1=IP->args[0].i;
-                printf("ENTER\t%ld\n",iVal1);
-                pusha(FP);
-                FP=SP;
-                SP+=iVal1;
-                IP=IP->next;
-                break;
-            case O_EQ_D:
-                dVal1=popd();
-                dVal2=popd();
-                printf("EQ_D\t(%g==%g -> %ld)\n",dVal2,dVal1,dVal2==dVal1);
-                pushi(dVal2==dVal1);
-                IP=IP->next;
-                break;
-            case O_EQ_C:
-                cVal1=popc();
-                cVal2=popc();
-                printf("EQ_C\t(%c==%c -> %ld)\n",cVal2,cVal1,cVal2==cVal1);
-                pushi(cVal2==cVal1);
-                IP=IP->next;
-                break;
-            case O_EQ_I:
-                iVal1=popi();
-                iVal2=popi();
-                printf("EQ_I\t(%d==%d -> %ld)\n",iVal2,iVal1,iVal2==iVal1);
-                pushi(iVal2==iVal1);
-                IP=IP->next;
-                break;
-            case O_EQ_A:
-                aVal1=(char*)popa();
-                aVal2=(char*)popa();
-                printf("EQ_A\t(%p==%p -> %ld)\n",aVal2,aVal1,aVal2==aVal1);
-                pushi(aVal2==aVal1);
-                IP=IP->next;
-                break;
+
             case O_NOTEQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                printf("NOTEQ_D\t(%g!=%g -> %ld)\n",dVal2,dVal1,dVal2!=dVal1);
+                printf("NOTEQ_D\t(%g!=%g -> %d)\n",dVal2,dVal1,dVal2!=dVal1);
                 pushi(dVal2!=dVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                printf("NOTEQ_C\t(%c!=%c -> %ld)\n",cVal2,cVal1,cVal2!=cVal1);
+                printf("NOTEQ_C\t(%c!=%c -> %d)\n",cVal2,cVal1,cVal2!=cVal1);
                 pushi(cVal2!=cVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                printf("NOTEQ_I\t(%d!=%d -> %ld)\n",iVal2,iVal1,iVal2!=iVal1);
+                printf("NOTEQ_I\t(%ld!=%ld -> %d)\n",iVal2,iVal1,iVal2!=iVal1);
                 pushi(iVal2!=iVal1);
                 IP=IP->next;
                 break;
             case O_NOTEQ_A:
                 aVal1=(char*)popa();
                 aVal2=(char*)popa();
-                printf("NOTEQ_A\t(%p!=%p -> %ld)\n",aVal2,aVal1,aVal2!=aVal1);
+                printf("NOTEQ_A\t(%p!=%p -> %d)\n",aVal2,aVal1,aVal2!=aVal1);
                 pushi(aVal2!=aVal1);
                 IP=IP->next;
                 break;
@@ -1891,42 +1915,42 @@ void run(Instr *IP)
             case O_GREATER_D:
                 dVal1=popd();
                 dVal2=popd();
-                printf("GREATER_D\t(%g > %g -> %ld)\n",dVal2,dVal1,dVal2 > dVal1);
+                printf("GREATER_D\t(%g > %g -> %d)\n",dVal2,dVal1,dVal2 > dVal1);
                 pushi(dVal2 > dVal1);
                 IP=IP->next;
                 break;
             case O_GREATER_C:
                 cVal1=popc();
                 cVal2=popc();
-                printf("GREATER_C\t(%c > %c -> %ld)\n",cVal2,cVal1,cVal2 > cVal1);
+                printf("GREATER_C\t(%c > %c -> %d)\n",cVal2,cVal1,cVal2 > cVal1);
                 pushi(cVal2 > cVal1);
                 IP=IP->next;
                 break;
             case O_GREATER_I:
                 iVal1=popi();
                 iVal2=popi();
-                printf("GREATER_I\t(%d > %d -> %ld)\n",iVal2,iVal1,iVal2 > iVal1);
+                printf("GREATER_I\t(%ld > %ld -> %d)\n",iVal2,iVal1,iVal2 > iVal1);
                 pushi(iVal2 > iVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                printf("GREATEREQ_D\t(%g >= %g -> %ld)\n",dVal2,dVal1,dVal2 >= dVal1);
+                printf("GREATEREQ_D\t(%g >= %g -> %d)\n",dVal2,dVal1,dVal2 >= dVal1);
                 pushi(dVal2 >= dVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                printf("GREATEREQ_C\t(%c >= %c -> %ld)\n",cVal2,cVal1,cVal2 >= cVal1);
+                printf("GREATEREQ_C\t(%c >= %c -> %d)\n",cVal2,cVal1,cVal2 >= cVal1);
                 pushi(cVal2 >= cVal1);
                 IP=IP->next;
                 break;
             case O_GREATEREQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                printf("GREATEREQ_I\t(%d >= %d -> %ld)\n",iVal2,iVal1,iVal2 >= iVal1);
+                printf("GREATEREQ_I\t(%ld >= %ld -> %d)\n",iVal2,iVal1,iVal2 >= iVal1);
                 pushi(iVal2 >= iVal1);
                 IP=IP->next;
                 break;
@@ -1972,48 +1996,48 @@ void run(Instr *IP)
                 IP=dVal1?(Instr*)IP->args[0].addr:IP->next;
                 break;
             case O_JMP:
-                printf("JMP\t%p\t(%lf)\n",IP->args[0].addr);
+                printf("JMP\t%p\t\n",IP->args[0].addr);
                 IP=(Instr*)IP->args[0].addr;
                 break;
             case O_LESS_D:
                 dVal1=popd();
                 dVal2=popd();
-                printf("LESS_D\t(%g < %g -> %ld)\n",dVal2,dVal1,dVal2 < dVal1);
+                printf("LESS_D\t(%g < %g -> %d)\n",dVal2,dVal1,dVal2 < dVal1);
                 pushi(dVal2 < dVal1);
                 IP=IP->next;
                 break;
             case O_LESS_C:
                 cVal1=popc();
                 cVal2=popc();
-                printf("LESS_C\t(%c < %c -> %ld)\n",cVal2,cVal1,cVal2 < cVal1);
+                printf("LESS_C\t(%c < %c -> %d)\n",cVal2,cVal1,cVal2 < cVal1);
                 pushi(cVal2 < cVal1);
                 IP=IP->next;
                 break;
             case O_LESS_I:
                 iVal1=popi();
                 iVal2=popi();
-                printf("LESS_I\t(%d < %d -> %ld)\n",iVal2,iVal1,iVal2 < iVal1);
+                printf("LESS_I\t(%ld < %ld -> %d)\n",iVal2,iVal1,iVal2 < iVal1);
                 pushi(iVal2 < iVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_D:
                 dVal1=popd();
                 dVal2=popd();
-                printf("LESSEQ_D\t(%g <= %g -> %ld)\n",dVal2,dVal1,dVal2 <= dVal1);
+                printf("LESSEQ_D\t(%g <= %g -> %d)\n",dVal2,dVal1,dVal2 <= dVal1);
                 pushi(dVal2 <= dVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_C:
                 cVal1=popc();
                 cVal2=popc();
-                printf("LESSEQ_C\t(%c <= %c -> %ld)\n",cVal2,cVal1,cVal2 <= cVal1);
+                printf("LESSEQ_C\t(%c <= %c -> %d)\n",cVal2,cVal1,cVal2 <= cVal1);
                 pushi(cVal2 <= cVal1);
                 IP=IP->next;
                 break;
             case O_LESSEQ_I:
                 iVal1=popi();
                 iVal2=popi();
-                printf("LESSEQ_I\t(%d <= %d -> %ld)\n",iVal2,iVal1,iVal2 <= iVal1);
+                printf("LESSEQ_I\t(%ld <= %ld -> %d)\n",iVal2,iVal1,iVal2 <= iVal1);
                 pushi(iVal2 <= iVal1);
                 IP=IP->next;
                 break;
@@ -2059,7 +2083,7 @@ void run(Instr *IP)
                 break;
             case O_PUSHCT_I:
                 iVal1=IP->args[0].i;
-                printf("PUSHCT_I\t%d\n",iVal1);
+                printf("PUSHCT_I\t%ld\n",iVal1);
                 pushi(iVal1);
                 IP=IP->next;
                 break;
@@ -2246,7 +2270,7 @@ int main()
     //mvTest();
     //run(instructions);
 
-    FILE *f = fopen("7.c", "rb");
+    FILE *f = fopen("code.c", "rb");
 
 
 
@@ -2257,7 +2281,10 @@ int main()
     char *text = (char*)malloc(size);
 
     fread(text,size, 1, f);
-    text[size-1] = 0;
+
+    //printf("%d\n\n\n\n\n",((int)text[size-1]));
+
+    text[size] = 0;
     pCrtCh = text;
 
     for(;;){
@@ -3949,7 +3976,7 @@ int exprPrimary(RetVal &rv){
         rv.type=createType(TB_INT,-1);
         rv.ctVal.i=tki->i;
 
-        printf("AAAAAAAAAAAAAAA %ld\n\n", crtTk->i);
+        //printf("AAAAAAAAAAAAAAA %ld\n\n", crtTk->i);
 
         rv.isCtVal=1;
         rv.isLVal=0;

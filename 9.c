@@ -15,5 +15,5 @@ int		count()
 
 void main()
 {
-	//put_i(count());
+	put_i(count());
 }

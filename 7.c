@@ -9,3 +9,4 @@ void main()
 	put_s("aria=");
 	put_d(pi*r*r);
 }
+
